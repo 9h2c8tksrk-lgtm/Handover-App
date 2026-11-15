@@ -128,6 +128,8 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 </main>
 <script>
 const CREW=["Carl","Declan","Lockie"], KEY="handovers.v1", ME="handover.me";
+// Everyone who can sign on / hand over. CREW are on the 21-day roster cycle; the rest aren't rostered.
+const USERS=[...CREW,"Hayden","Stuart"];
 const $=id=>document.getElementById(id);
 const TKEY="planner.v1";
 let tasks=JSON.parse(localStorage.getItem(TKEY)||"[]");
@@ -140,7 +142,7 @@ function currentShift(d=new Date()){const h=d.getHours();return h>=5&&h<17?"Day"
 function shiftDate(d=new Date()){const x=new Date(d);if(d.getHours()<5)x.setDate(x.getDate()-1);
   return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")}
 
-CREW.forEach(n=>{$("from").add(new Option(n,n));$("to").add(new Option(n,n))});
+USERS.forEach(n=>{$("from").add(new Option(n,n));$("to").add(new Option(n,n))});
 function defaults(){
   if(ss.cur)$("from").value=ss.cur.user;
   $("shift").value=currentShift();$("date").value=shiftDate();setTo();
@@ -263,11 +265,21 @@ let sbUser=null;
 function sbStatus(){
   $("sbstat").textContent=!sb?"Parts Tracker unavailable offline – using basic parts list.":sbUser?"🔩 Parts Tracker connected: "+sbUser.email:"Not signed in to Parts Tracker – using basic parts list.";
   $("sbform").style.display=sb&&!sbUser?"block":"none"}
-if(sb){sb.auth.getSession().then(({data})=>{sbUser=data.session?data.session.user:null;sbStatus()});
+if(sb){sb.auth.getSession().then(({data})=>{sbUser=data.session?data.session.user:null;sbStatus();if(!sbUser)ptAutoSignIn()});
   sb.auth.onAuthStateChange((_,se)=>{sbUser=se?se.user:null;sbStatus()})}
+// Remember Parts Tracker credentials on this device so signing on to shift also signs into Parts Tracker
+const PTCRED="pt.cred.v1";
+async function ptAutoSignIn(){
+  if(!sb||sbUser||!navigator.onLine)return;
+  const c=JSON.parse(localStorage.getItem(PTCRED)||"null");if(!c)return;
+  const {error}=await sb.auth.signInWithPassword({email:c.email,password:c.password});
+  if(error&&/credentials/i.test(error.message))localStorage.removeItem(PTCRED)}
 $("sbform").onsubmit=async e=>{e.preventDefault();
-  const {error}=await sb.auth.signInWithPassword({email:$("sbemail").value.trim(),password:$("sbpass").value});
-  $("sbpass").value="";$("scanmsg").textContent=error?"Sign-in failed: "+error.message:"Signed in."};
+  const email=$("sbemail").value.trim(),password=$("sbpass").value;
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  $("sbpass").value="";
+  if(!error)localStorage.setItem(PTCRED,JSON.stringify({email,password}));
+  $("scanmsg").textContent=error?"Sign-in failed: "+error.message:"Signed in – this device will now sign in automatically."};
 const COLS="barcode,part_name,description,stock_level";
 async function findPart(code){
   if(sb&&sbUser){try{
@@ -309,7 +321,7 @@ async function hash(pin){
   if(window.crypto&&crypto.subtle){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));
     return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
   let h=5381;for(const c of t)h=(h*33)^c.charCodeAt(0);return "d"+(h>>>0)}
-CREW.forEach(n=>$("su").add(new Option(n,n)));
+USERS.forEach(n=>$("su").add(new Option(n,n)));
 function openLock(){$("su").value=whoOn(parseD(shiftDate()),currentShift());showLock()}
 function showLock(){
   $("lockinfo").textContent=ss.cur?`${ss.cur.user} is on shift. Signing on will sign them off.`:"Nobody is signed on.";
@@ -337,7 +349,7 @@ $("lockform").onsubmit=async e=>{
        !confirm(c.user+" hasn't submitted a handover this shift. Sign them off anyway?"))return;
     c.off=new Date().toISOString();c.offBy=u;ss.log.push(c);ss.cur=null}
   if(!ss.cur)ss.cur={user:u,at:new Date().toISOString(),shiftKey:here()};
-  ssave();pushShift();$("lock").style.display="none";defaults();render()};
+  ssave();pushShift();$("lock").style.display="none";defaults();render();ptAutoSignIn()};
 // ---- cross-device sync (Supabase handover_sync table) ----
 const SOUT="sync.out.v1", SLAST="sync.last.v1";
 let out=JSON.parse(localStorage.getItem(SOUT)||"[]"), lastSync=localStorage.getItem(SLAST)||"";
