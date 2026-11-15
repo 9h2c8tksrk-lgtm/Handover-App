@@ -33,7 +33,7 @@ button.sec{background:#3a424b;color:#eee}
 .task.done span{text-decoration:line-through;color:#888}
 .task .m{font-size:.75rem;color:#aaa;display:block}
 .tag{font-size:.7rem;padding:2px 6px;border-radius:4px;background:#5b8def;color:#111;margin-right:6px}
-.tag.order{background:#e8a317}.tag.roll{background:#ff6b6b}
+.tag.order{background:#e8a317}.tag.roll{background:#ff6b6b}.tag.recur{background:#b48ef0}
 .task button{padding:4px 8px;font-size:.8rem;margin-left:auto}
 #lock{position:fixed;inset:0;background:#1b1f24;z-index:10;display:none;align-items:center;justify-content:center;padding:16px}
 #lock .card{width:100%;max-width:380px}
@@ -201,6 +201,7 @@ function entry(h){
   <button class="sec" data-copy="${h.id}">Copy</button><button class="sec" data-del="${h.id}">Delete</button></div></div>`;
 }
 function render(){
+  spawnRecurring();
   const me=$("from").value;
   const p=data.filter(h=>h.to===me&&!h.ack);
   $("pending").innerHTML=p.length?`<div class="card"><h2>⚠ Handovers waiting for ${me} (${p.length})</h2>${p.map(entry).join("")}</div>`:"";
@@ -212,12 +213,30 @@ function render(){
   $("now").textContent=currentShift()+" shift • "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
 }
 const here=()=>currentShift()+" "+shiftDate();
+// ---- recurring weekly tasks (dow: 0=Sun..6=Sat) ----
+const RECUR=[
+  {dow:1,shift:"Day",text:"Check with Stores Port Hedland that cages will be returned to suppliers"},
+  {dow:3,shift:"Day",text:"Stock count – McPhee ROM"},
+  {dow:3,shift:"Day",text:"Follow up open purchase orders with suppliers"},
+];
+const RSEEN="recur.seen.v1";
+let rseen=JSON.parse(localStorage.getItem(RSEEN)||"[]").filter(id=>Date.now()-id<30*864e5);
+function spawnRecurring(){
+  const date=shiftDate(),sh=currentShift(),dow=parseD(date).getDay();
+  let added=false;
+  RECUR.forEach((r,i)=>{
+    if(r.dow!==dow||r.shift!==sh)return;
+    const id=parseD(date).getTime()+5*36e5+i; // deterministic per occurrence so devices don't duplicate
+    if(rseen.includes(id)||tasks.some(t=>t.id===id))return;
+    const t={id,type:"task",recur:true,text:r.text,by:"Recurring",shiftKey:here(),done:false};
+    tasks.push(t);pushT(t);rseen.push(id);added=true});
+  if(added){tasks.sort((a,b)=>a.id-b.id);tsave();localStorage.setItem(RSEEN,JSON.stringify(rseen))}}
 function renderTasks(){
   const cur=here();
   const open=tasks.filter(t=>!t.done), done=tasks.filter(t=>t.done&&t.doneShift===cur);
   const row=t=>{const roll=!t.done&&t.shiftKey!==cur;
     return `<div class="task ${t.done?"done":""}"><input type="checkbox" data-tick="${t.id}" ${t.done?"checked":""}>
-    <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}${t.qty>1?" ×"+t.qty:""}</span>
+    <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${t.recur?'<span class="tag recur">🔁 WEEKLY</span>':""}${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}${t.qty>1?" ×"+t.qty:""}</span>
     <small class="m">Added by ${t.by} – ${t.shiftKey}${t.done?` • done by ${t.doneBy}`:""}</small></div>
     <button class="sec" data-tdel="${t.id}">✕</button></div>`};
   $("tasks").innerHTML=(open.length?open.map(row).join(""):"<p>Nothing outstanding 🎉</p>")
@@ -383,7 +402,8 @@ function applyRow(r){
     if(!v.deleted){data.push(v);data.sort((a,b)=>b.id-a.id)}}
   else if(r.kind==="task"){const id=+r.id.slice(5);
     tasks=tasks.filter(t=>t.id!==id);
-    if(!v.deleted){tasks.push(v);tasks.sort((a,b)=>a.id-b.id)}}
+    if(!v.deleted){tasks.push(v);tasks.sort((a,b)=>a.id-b.id)}
+    else if(!rseen.includes(id)){rseen.push(id);localStorage.setItem(RSEEN,JSON.stringify(rseen))}}
   else if(r.kind==="pin"){const u=r.id.slice(4);if(v.hash)pins[u]=v.hash}
   else if(r.kind==="shift")ss.cur=v.cur||null}
 async function pull(){
