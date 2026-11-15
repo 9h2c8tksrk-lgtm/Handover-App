@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shift Handover</title>
 <script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}
 body{font-family:system-ui,sans-serif;margin:0;background:#1b1f24;color:#eee}
@@ -54,6 +55,11 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 <div id="scanbox"><div class="card">
   <h2>Scan parts to order</h2>
   <div id="reader"></div>
+  <div id="sbstat" style="font-size:.85rem;color:#bbb"></div>
+  <form id="sbform" style="display:none;margin:6px 0">
+    <div class="row"><input id="sbemail" type="email" placeholder="Parts Tracker email" autocomplete="username"><input id="sbpass" type="password" placeholder="Password" autocomplete="current-password"></div>
+    <button style="margin-top:6px;width:100%">Sign in to Parts Tracker</button>
+  </form>
   <div id="scanmsg">Point the camera at a barcode. Repeat scans add to the quantity.</div>
   <div class="row"><input id="manual" placeholder="Or type barcode / part no."><button type="button" id="manualadd" style="flex:0 0 auto">Add</button></div>
   <div class="actions"><button type="button" class="sec" id="scandone">Done</button></div>
@@ -243,18 +249,39 @@ async function loadParts(){
   try{parts=await(await fetch(PT+"master_parts_list.json")).json();localStorage.setItem("parts.cache",JSON.stringify(parts))}
   catch{parts=JSON.parse(localStorage.getItem("parts.cache")||"[]")}
   return parts}
-function addOrder(raw){
+const sb=window.supabase?supabase.createClient("https://botdhowoytwczstqrjom.supabase.co","sb_publishable_FQkw8ntiw0IT-XynvcIaJg_4wv3l5tO"):null;
+let sbUser=null;
+function sbStatus(){
+  $("sbstat").textContent=!sb?"Parts Tracker unavailable offline – using basic parts list.":sbUser?"🔩 Parts Tracker connected: "+sbUser.email:"Not signed in to Parts Tracker – using basic parts list.";
+  $("sbform").style.display=sb&&!sbUser?"block":"none"}
+if(sb){sb.auth.getSession().then(({data})=>{sbUser=data.session?data.session.user:null;sbStatus()});
+  sb.auth.onAuthStateChange((_,se)=>{sbUser=se?se.user:null;sbStatus()})}
+$("sbform").onsubmit=async e=>{e.preventDefault();
+  const {error}=await sb.auth.signInWithPassword({email:$("sbemail").value.trim(),password:$("sbpass").value});
+  $("sbpass").value="";$("scanmsg").textContent=error?"Sign-in failed: "+error.message:"Signed in."};
+const COLS="barcode,part_name,description,stock_level";
+async function findPart(code){
+  if(sb&&sbUser){try{
+    let {data}=await sb.from("parts").select(COLS).eq("barcode",code).maybeSingle();
+    if(!data){const a=await sb.from("part_barcodes").select("barcode").eq("alias",code).maybeSingle();
+      if(a.data)data=(await sb.from("parts").select(COLS).eq("barcode",a.data.barcode).maybeSingle()).data}
+    if(data)return data}catch{}}
+  const m=(parts||[]).find(x=>String(x.Barcode).toLowerCase()===code.toLowerCase());
+  return m?{barcode:m.Barcode,part_name:m.PartName,description:m.Description,stock_level:m.StockLevel}:null}
+async function addOrder(raw){
   const code=raw.trim();if(!code)return;
-  const p=parts.find(x=>String(x.Barcode).toLowerCase()===code.toLowerCase());
-  const ex=tasks.find(t=>!t.done&&t.type==="order"&&t.code===code);
+  const p=await findPart(code);
+  const key=p?p.barcode:code;
+  const ex=tasks.find(t=>!t.done&&t.type==="order"&&t.code===key);
   if(ex)ex.qty++;
-  else tasks.push({id:Date.now(),type:"order",code,qty:1,by:$("from").value,shiftKey:here(),done:false,
-    text:p?`${p.PartName} (${code})`:`Unknown part (${code})`});
+  else{const d=p&&p.description&&p.description!==p.part_name?" – "+p.description.slice(0,70):"";
+    tasks.push({id:Date.now(),type:"order",code:key,qty:1,by:$("from").value,shiftKey:here(),done:false,
+      text:p?`${p.part_name}${d} (${key})`:`Unknown part (${code})`})}
   tsave();render();
-  $("scanmsg").textContent=(p?"✔ ":"⚠ Not in parts list: ")+(p?p.PartName:code)+(ex?" – qty "+ex.qty:" added")}
+  $("scanmsg").textContent=(p?"✔ "+p.part_name+(p.stock_level!=null?" (stock "+p.stock_level+")":""):"⚠ Not found: "+code)+(ex?" – qty "+ex.qty:" added")}
 $("tscan").onclick=async()=>{
   if(!window.Html5Qrcode){alert("Scanner needs an internet connection. You can still type the item in.");return}
-  await loadParts();$("scanbox").style.display="flex";
+  await loadParts();sbStatus();$("scanbox").style.display="flex";
   scanner=new Html5Qrcode("reader");
   scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:260,height:150}},c=>{
     if(c===lastScan.c&&Date.now()-lastScan.t<3000)return;lastScan={c,t:Date.now()};addOrder(c)})
