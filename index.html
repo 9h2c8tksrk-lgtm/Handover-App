@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shift Handover</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,sans-serif;margin:0;background:#1b1f24;color:#eee}
+header{padding:14px 16px;background:#e8a317;color:#111;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+header h1{margin:0;font-size:1.3rem}
+main{max-width:760px;margin:0 auto;padding:12px}
+.card{background:#262c33;border-radius:10px;padding:14px;margin-bottom:14px}
+h2{margin:0 0 10px;font-size:1.05rem;color:#e8a317}
+label{display:block;font-size:.85rem;margin:10px 0 4px;color:#bbb}
+input,select,textarea{width:100%;padding:10px;font-size:1rem;border-radius:6px;border:1px solid #444;background:#12161a;color:#eee}
+textarea{min-height:80px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+button{padding:11px 16px;font-size:1rem;border:0;border-radius:6px;background:#e8a317;color:#111;font-weight:600;cursor:pointer}
+button.sec{background:#3a424b;color:#eee}
+.check{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:1rem;color:#eee}
+.check input{width:22px;height:22px}
+.entry{border-left:4px solid #e8a317;padding:8px 12px;margin:10px 0;background:#1f242a;border-radius:6px}
+.entry.night{border-color:#5b8def}
+.entry small{color:#aaa}
+.entry pre{white-space:pre-wrap;font-family:inherit;margin:6px 0}
+.flag{color:#ff6b6b;font-weight:600}
+.ack{color:#6bd68a}
+.task{display:flex;align-items:center;gap:10px;padding:8px;margin:6px 0;background:#1f242a;border-radius:6px}
+.task input{width:22px;height:22px;flex:none}
+.task.done span{text-decoration:line-through;color:#888}
+.task .m{font-size:.75rem;color:#aaa;display:block}
+.tag{font-size:.7rem;padding:2px 6px;border-radius:4px;background:#5b8def;color:#111;margin-right:6px}
+.tag.order{background:#e8a317}.tag.roll{background:#ff6b6b}
+.task button{padding:4px 8px;font-size:.8rem;margin-left:auto}
+#lock{position:fixed;inset:0;background:#1b1f24;z-index:10;display:none;align-items:center;justify-content:center;padding:16px}
+#lock .card{width:100%;max-width:380px}
+#lock .err{color:#ff6b6b;min-height:1.2em;margin:8px 0}
+#banner .card{background:#7a2a2a}
+#who{display:flex;gap:8px;align-items:center}#who button{padding:5px 10px;font-size:.85rem}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+</style>
+</head>
+<body>
+<header><h1>🔧 Shift Handover</h1><div id="who"><span id="now"></span><span id="onshift"></span><button id="signoff" class="sec">Sign off</button></div></header>
+<div id="lock"><form class="card" id="lockform">
+  <h2>Sign on to shift</h2>
+  <div id="lockinfo" style="margin-bottom:8px"></div>
+  <label>Name</label><select id="su"></select>
+  <label>PIN (4–6 digits)</label><input id="spin" type="password" inputmode="numeric" autocomplete="off" maxlength="6">
+  <div id="newpin" style="display:none"><label>First time – confirm new PIN</label><input id="spin2" type="password" inputmode="numeric" autocomplete="off" maxlength="6"></div>
+  <div class="err" id="lockerr"></div>
+  <button style="width:100%">Sign on</button>
+</form></div>
+<main>
+<div id="banner"></div>
+<div id="pending"></div>
+
+<div class="card">
+  <h2>📋 Day planner – to do &amp; to order</h2>
+  <form id="tform" class="row" style="align-items:stretch">
+    <select id="ttype" style="flex:0 0 120px"><option value="task">Task</option><option value="order">Order part</option></select>
+    <input id="ttext" placeholder="Add item…" required style="flex:3">
+    <button style="flex:0 0 auto">Add</button>
+  </form>
+  <div id="tasks"></div>
+</div>
+
+<form id="form" class="card">
+  <h2>New handover</h2>
+  <div class="row">
+    <div><label>Handing over (you)</label><select id="from"></select></div>
+    <div><label>Taking over</label><select id="to"></select></div>
+  </div>
+  <div class="row">
+    <div><label>Shift ending</label>
+      <select id="shift"><option value="Day">Day (5am–5pm)</option><option value="Night">Night (5pm–5am)</option></select></div>
+    <div><label>Shift date</label><input type="date" id="date"></div>
+  </div>
+  <label>Jobs in progress (what's left to do)</label><textarea id="inprog"></textarea>
+  <label>Jobs completed</label><textarea id="done"></textarea>
+  <label>Parts / stock – ordered, arriving, or running low</label><textarea id="parts"></textarea>
+  <label>Equipment, tools & vehicles – faults or out of service</label><textarea id="equip"></textarea>
+  <label>Safety issues / incidents / near misses</label><textarea id="safety"></textarea>
+  <label>Other notes (deliveries, visitors, customers, callbacks)</label><textarea id="notes"></textarea>
+  <h2 style="margin-top:16px">End-of-shift checklist</h2>
+  <label class="check"><input type="checkbox" class="chk"> Workshop & store tidied, floors clear</label>
+  <label class="check"><input type="checkbox" class="chk"> Tools returned & accounted for</label>
+  <label class="check"><input type="checkbox" class="chk"> Parts booked in/out, stock sheet updated</label>
+  <label class="check"><input type="checkbox" class="chk"> Hazards made safe / signed off</label>
+  <label class="check"><input type="checkbox" class="chk"> Store & vehicles/equipment locked or secured</label>
+  <div class="actions"><button type="submit">Submit handover</button><button type="reset" class="sec">Clear</button></div>
+</form>
+
+<div class="card">
+  <h2>History</h2>
+  <div class="actions"><button class="sec" id="export">Export JSON</button><button class="sec" id="clear">Clear all</button></div>
+  <div id="history"></div>
+</div>
+</main>
+<script>
+const CREW=["Carl","Declan","Lockie"], KEY="handovers.v1", ME="handover.me";
+const $=id=>document.getElementById(id);
+const TKEY="planner.v1";
+let tasks=JSON.parse(localStorage.getItem(TKEY)||"[]");
+const tsave=()=>localStorage.setItem(TKEY,JSON.stringify(tasks));
+let data=JSON.parse(localStorage.getItem(KEY)||"[]");
+const save=()=>localStorage.setItem(KEY,JSON.stringify(data));
+
+function currentShift(d=new Date()){const h=d.getHours();return h>=5&&h<17?"Day":"Night"}
+// Night shift after midnight belongs to the date it started
+function shiftDate(d=new Date()){const x=new Date(d);if(d.getHours()<5)x.setDate(x.getDate()-1);
+  return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")}
+
+CREW.forEach(n=>{$("from").add(new Option(n,n));$("to").add(new Option(n,n))});
+function defaults(){
+  if(ss.cur)$("from").value=ss.cur.user;
+  $("shift").value=currentShift();$("date").value=shiftDate();setTo();
+}
+function setTo(){ // default: next person in rotation
+  const i=CREW.indexOf($("from").value);$("to").value=CREW[(i+1)%CREW.length]}
+$("from").disabled=true;
+$("form").addEventListener("reset",()=>setTimeout(defaults));
+
+$("form").onsubmit=e=>{
+  e.preventDefault();
+  if($("from").value===$("to").value&&!confirm("Handing over to yourself – continue?"))return;
+  const chk=[...document.querySelectorAll(".chk")];
+  data.unshift({id:Date.now(),created:new Date().toISOString(),from:$("from").value,to:$("to").value,
+    shift:$("shift").value,date:$("date").value,inprog:$("inprog").value,done:$("done").value,
+    parts:$("parts").value,equip:$("equip").value,safety:$("safety").value,notes:$("notes").value,
+    open:tasks.filter(t=>!t.done).map(t=>(t.type==="order"?"ORDER: ":"")+t.text),
+    checks:chk.filter(c=>c.checked).length+"/"+chk.length,ack:null});
+  save();$("form").reset();render();window.scrollTo(0,0);
+};
+
+const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+function body(h){
+  const f=[["Jobs in progress","inprog"],["Completed","done"],["Parts / stock","parts"],["Equipment","equip"],["Safety","safety"],["Notes","notes"]];
+  return f.filter(([,k])=>h[k].trim()).map(([t,k])=>`<b class="${k==="safety"?"flag":""}">${t}</b><pre>${esc(h[k])}</pre>`).join("")
+    +(h.open&&h.open.length?`<b>Rolled over (not done)</b><pre>${esc(h.open.map(x=>"• "+x).join("\n"))}</pre>`:"")
+    +`<small>Checklist ${h.checks}</small>`;
+}
+function entry(h){
+  const d=new Date(h.created).toLocaleString();
+  return `<div class="entry ${h.shift.toLowerCase()}"><b>${h.shift} shift ${h.date}</b> — ${h.from} → ${h.to}<br><small>${d}</small>
+  ${body(h)}<div class="actions">
+  ${h.ack?`<span class="ack">✔ Acknowledged by ${h.ack.by} ${new Date(h.ack.at).toLocaleString()}</span>`
+    :`<button data-ack="${h.id}" ${h.to!==$("from").value?"disabled":""}>I've read this (${h.to})</button>`}
+  <button class="sec" data-copy="${h.id}">Copy</button><button class="sec" data-del="${h.id}">Delete</button></div></div>`;
+}
+function render(){
+  const me=$("from").value;
+  const p=data.filter(h=>h.to===me&&!h.ack);
+  $("pending").innerHTML=p.length?`<div class="card"><h2>⚠ Handovers waiting for ${me} (${p.length})</h2>${p.map(entry).join("")}</div>`:"";
+  $("history").innerHTML=data.length?data.map(entry).join(""):"<p>No handovers yet.</p>";
+  renderTasks();
+  $("onshift").textContent=ss.cur?"👤 "+ss.cur.user+" since "+new Date(ss.cur.at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"";
+  $("signoff").style.display=ss.cur?"":"none";
+  $("banner").innerHTML=ss.cur&&ss.cur.shiftKey!==here()?`<div class="card"><h2 style="color:#fff">⏰ Shift change – ${ss.cur.user} is still signed on from ${ss.cur.shiftKey}</h2><p>Finish the handover, then the incoming person signs on.</p><button id="bsign">Sign on for ${here()}</button></div>`:"";
+  $("now").textContent=currentShift()+" shift • "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+}
+const here=()=>currentShift()+" "+shiftDate();
+function renderTasks(){
+  const cur=here();
+  const open=tasks.filter(t=>!t.done), done=tasks.filter(t=>t.done&&t.doneShift===cur);
+  const row=t=>{const roll=!t.done&&t.shiftKey!==cur;
+    return `<div class="task ${t.done?"done":""}"><input type="checkbox" data-tick="${t.id}" ${t.done?"checked":""}>
+    <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}</span>
+    <small class="m">Added by ${t.by} – ${t.shiftKey}${t.done?` • done by ${t.doneBy}`:""}</small></div>
+    <button class="sec" data-tdel="${t.id}">✕</button></div>`};
+  $("tasks").innerHTML=(open.length?open.map(row).join(""):"<p>Nothing outstanding 🎉</p>")
+    +(done.length?`<small>Done this shift</small>`+done.map(row).join(""):"");
+}
+$("tform").onsubmit=e=>{e.preventDefault();
+  tasks.push({id:Date.now(),text:$("ttext").value.trim(),type:$("ttype").value,by:$("from").value,shiftKey:here(),done:false});
+  tsave();$("ttext").value="";render()};
+document.addEventListener("click",e=>{
+  if(e.target.dataset.tdel){tasks=tasks.filter(x=>x.id!=e.target.dataset.tdel);tsave();render();return}
+  const t=e.target.dataset;
+  if(t.ack){const h=data.find(x=>x.id==t.ack);h.ack={by:$("from").value,at:new Date().toISOString()};save();render()}
+  if(t.del&&confirm("Delete this handover?")){data=data.filter(x=>x.id!=t.del);save();render()}
+  if(t.copy){const h=data.find(x=>x.id==t.copy);
+    const txt=`${h.shift} shift ${h.date}: ${h.from} -> ${h.to}\n`+[["In progress","inprog"],["Completed","done"],["Parts","parts"],["Equipment","equip"],["Safety","safety"],["Notes","notes"]]
+      .filter(([,k])=>h[k].trim()).map(([a,k])=>`${a}: ${h[k]}`).join("\n");
+    navigator.clipboard.writeText(txt).then(()=>alert("Copied"))}
+});
+document.addEventListener("change",e=>{const id=e.target.dataset.tick;if(!id)return;
+  const t=tasks.find(x=>x.id==id);t.done=e.target.checked;
+  t.doneBy=t.done?$("from").value:null;t.doneShift=t.done?here():null;
+  tasks=tasks.filter(x=>!x.done||Date.now()-x.id<30*864e5);tsave();render()});
+$("export").onclick=()=>{const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));
+  a.download="handovers.json";a.click()};
+$("clear").onclick=()=>{if(confirm("Delete ALL handovers?")){data=[];save();render()}};
+// ---- sign on / off ----
+const SKEY="shift.v1", PKEY="pins.v1";
+let ss=JSON.parse(localStorage.getItem(SKEY)||'{"cur":null,"log":[]}');
+const pins=JSON.parse(localStorage.getItem(PKEY)||"{}");
+const ssave=()=>localStorage.setItem(SKEY,JSON.stringify(ss));
+async function hash(pin){
+  const t="handover:"+pin;
+  if(window.crypto&&crypto.subtle){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));
+    return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+  let h=5381;for(const c of t)h=(h*33)^c.charCodeAt(0);return "d"+(h>>>0)}
+CREW.forEach(n=>$("su").add(new Option(n,n)));
+function showLock(){
+  $("lockinfo").textContent=ss.cur?`${ss.cur.user} is on shift. Signing on will sign them off.`:"Nobody is signed on.";
+  $("spin").value=$("spin2").value="";$("lockerr").textContent="";
+  $("newpin").style.display=pins[$("su").value]?"none":"block";
+  $("lock").style.display="flex";$("spin").focus()}
+$("su").onchange=showLock;
+$("signoff").onclick=()=>{if(!confirm("Sign off "+ss.cur.user+"?"))return;
+  ss.cur.off=new Date().toISOString();ss.log.push(ss.cur);ss.cur=null;ssave();render();showLock()};
+document.addEventListener("click",e=>{if(e.target.id==="bsign")showLock()});
+$("lockform").onsubmit=async e=>{
+  e.preventDefault();const u=$("su").value,pin=$("spin").value,err=m=>$("lockerr").textContent=m;
+  if(!/^\d{4,6}$/.test(pin))return err("PIN must be 4–6 digits");
+  const hp=await hash(pin);
+  if(!pins[u]){if(pin!==$("spin2").value)return err("PINs don't match");pins[u]=hp;localStorage.setItem(PKEY,JSON.stringify(pins))}
+  else if(pins[u]!==hp)return err("Wrong PIN");
+  const c=ss.cur;
+  if(c&&(c.user!==u||c.shiftKey!==here())){
+    if(c.user!==u&&!data.some(h=>h.from===c.user&&h.created>=c.at)&&
+       !confirm(c.user+" hasn't submitted a handover this shift. Sign them off anyway?"))return;
+    c.off=new Date().toISOString();c.offBy=u;ss.log.push(c);ss.cur=null}
+  if(!ss.cur)ss.cur={user:u,at:new Date().toISOString(),shiftKey:here()};
+  ssave();$("lock").style.display="none";defaults();render()};
+defaults();render();setInterval(render,60000);
+if(!ss.cur)showLock();
+</script>
+</body>
+</html>
