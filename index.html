@@ -51,7 +51,7 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 </style>
 </head>
 <body>
-<header><h1>🔧 Shift Handover</h1><div id="who"><span id="now"></span><span id="onshift"></span><button id="signoff" class="sec">Sign off</button></div></header>
+<header><h1>🔧 Shift Handover</h1><div id="who"><span id="sync" style="font-size:.8rem"></span><span id="now"></span><span id="onshift"></span><button id="signoff" class="sec">Sign off</button></div></header>
 <div id="scanbox"><div class="card">
   <h2>Scan parts to order</h2>
   <div id="reader"></div>
@@ -174,12 +174,13 @@ $("form").onsubmit=e=>{
   e.preventDefault();
   if($("from").value===$("to").value&&!confirm("Handing over to yourself – continue?"))return;
   const chk=[...document.querySelectorAll(".chk")];
-  data.unshift({id:Date.now(),created:new Date().toISOString(),from:$("from").value,to:$("to").value,
+  const h={id:Date.now(),created:new Date().toISOString(),from:$("from").value,to:$("to").value,
     shift:$("shift").value,date:$("date").value,inprog:$("inprog").value,done:$("done").value,
     parts:$("parts").value,equip:$("equip").value,safety:$("safety").value,notes:$("notes").value,
     open:tasks.filter(t=>!t.done).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")),
-    checks:chk.filter(c=>c.checked).length+"/"+chk.length,ack:null});
-  save();$("form").reset();render();window.scrollTo(0,0);
+    checks:chk.filter(c=>c.checked).length+"/"+chk.length,ack:null};
+  data.unshift(h);
+  save();pushH(h);$("form").reset();render();window.scrollTo(0,0);
 };
 
 const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -221,13 +222,15 @@ function renderTasks(){
     +(done.length?`<small>Done this shift</small>`+done.map(row).join(""):"");
 }
 $("tform").onsubmit=e=>{e.preventDefault();
-  tasks.push({id:Date.now(),text:$("ttext").value.trim(),type:$("ttype").value,by:$("from").value,shiftKey:here(),done:false});
-  tsave();$("ttext").value="";render()};
+  const t={id:Date.now(),text:$("ttext").value.trim(),type:$("ttype").value,by:$("from").value,shiftKey:here(),done:false};
+  tasks.push(t);
+  tsave();pushT(t);$("ttext").value="";render()};
 document.addEventListener("click",e=>{
-  if(e.target.dataset.tdel){tasks=tasks.filter(x=>x.id!=e.target.dataset.tdel);tsave();render();return}
+  if(e.target.dataset.tdel){const id=e.target.dataset.tdel;
+    tasks=tasks.filter(x=>x.id!=id);tsave();pushDel("task:"+id,"task");render();return}
   const t=e.target.dataset;
-  if(t.ack){const h=data.find(x=>x.id==t.ack);h.ack={by:$("from").value,at:new Date().toISOString()};save();render()}
-  if(t.del&&confirm("Delete this handover?")){data=data.filter(x=>x.id!=t.del);save();render()}
+  if(t.ack){const h=data.find(x=>x.id==t.ack);h.ack={by:$("from").value,at:new Date().toISOString()};save();pushH(h);render()}
+  if(t.del&&confirm("Delete this handover?")){data=data.filter(x=>x.id!=t.del);save();pushDel("handover:"+t.del,"handover");render()}
   if(t.copy){const h=data.find(x=>x.id==t.copy);
     const txt=`${h.shift} shift ${h.date}: ${h.from} -> ${h.to}\n`+[["In progress","inprog"],["Completed","done"],["Parts","parts"],["Equipment","equip"],["Safety","safety"],["Notes","notes"]]
       .filter(([,k])=>h[k].trim()).map(([a,k])=>`${a}: ${h[k]}`).join("\n");
@@ -236,11 +239,13 @@ document.addEventListener("click",e=>{
 document.addEventListener("change",e=>{const id=e.target.dataset.tick;if(!id)return;
   const t=tasks.find(x=>x.id==id);t.done=e.target.checked;
   t.doneBy=t.done?$("from").value:null;t.doneShift=t.done?here():null;
-  tasks=tasks.filter(x=>!x.done||Date.now()-x.id<30*864e5);tsave();render()});
+  const old=tasks.filter(x=>x.done&&Date.now()-x.id>=30*864e5);
+  tasks=tasks.filter(x=>!x.done||Date.now()-x.id<30*864e5);
+  tsave();pushT(t);old.forEach(x=>pushDel("task:"+x.id,"task"));render()});
 $("export").onclick=()=>{const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));
   a.download="handovers.json";a.click()};
-$("clear").onclick=()=>{if(confirm("Delete ALL handovers?")){data=[];save();render()}};
+$("clear").onclick=()=>{if(confirm("Delete ALL handovers?")){data.forEach(h=>pushDel("handover:"+h.id,"handover"));data=[];save();render()}};
 // ---- auto-grow textareas ----
 const grow=t=>{t.style.height="auto";t.style.height=t.scrollHeight+2+"px"};
 document.addEventListener("input",e=>{if(e.target.tagName==="TEXTAREA")grow(e.target)});
@@ -277,10 +282,11 @@ async function addOrder(raw){
   const p=await findPart(code);
   const key=p?p.barcode:code;
   const ex=tasks.find(t=>!t.done&&t.type==="order"&&t.code===key);
-  if(ex)ex.qty++;
+  if(ex){ex.qty++;pushT(ex)}
   else{const d=p&&p.description&&p.description!==p.part_name?" – "+p.description.slice(0,70):"";
-    tasks.push({id:Date.now(),type:"order",code:key,qty:1,by:$("from").value,shiftKey:here(),done:false,
-      text:p?`${p.part_name}${d} (${key})`:`Unknown part (${code})`})}
+    const t={id:Date.now(),type:"order",code:key,qty:1,by:$("from").value,shiftKey:here(),done:false,
+      text:p?`${p.part_name}${d} (${key})`:`Unknown part (${code})`};
+    tasks.push(t);pushT(t)}
   tsave();render();
   $("scanmsg").textContent=(p?"✔ "+p.part_name+(p.stock_level!=null?" (stock "+p.stock_level+")":""):"⚠ Not found: "+code)+(ex?" – qty "+ex.qty:" added")}
 $("tscan").onclick=async()=>{
@@ -312,13 +318,16 @@ function showLock(){
   $("lock").style.display="flex";$("spin").focus()}
 $("su").onchange=showLock;
 $("signoff").onclick=()=>{if(!confirm("Sign off "+ss.cur.user+"?"))return;
-  ss.cur.off=new Date().toISOString();ss.log.push(ss.cur);ss.cur=null;ssave();render();openLock()};
+  ss.cur.off=new Date().toISOString();ss.log.push(ss.cur);ss.cur=null;ssave();pushShift();render();openLock()};
 document.addEventListener("click",e=>{if(e.target.id==="bsign")openLock()});
 $("lockform").onsubmit=async e=>{
   e.preventDefault();const u=$("su").value,pin=$("spin").value,err=m=>$("lockerr").textContent=m;
   if(!/^\d{4,6}$/.test(pin))return err("PIN must be 4–6 digits");
+  if(!pins[u]&&sb&&navigator.onLine){ // PIN may exist on another device – check server first
+    try{const {data:pr}=await sb.from("handover_sync").select("value").eq("id","pin:"+u).maybeSingle();
+      if(pr&&pr.value&&pr.value.hash){pins[u]=pr.value.hash;localStorage.setItem(PKEY,JSON.stringify(pins))}}catch{}}
   const hp=await hash(pin);
-  if(!pins[u]){if(pin!==$("spin2").value)return err("PINs don't match");pins[u]=hp;localStorage.setItem(PKEY,JSON.stringify(pins))}
+  if(!pins[u]){if(pin!==$("spin2").value)return err("PINs don't match");pins[u]=hp;localStorage.setItem(PKEY,JSON.stringify(pins));pushPin(u)}
   else if(pins[u]!==hp)return err("Wrong PIN");
   const rost=whoOn(parseD(shiftDate()),currentShift());
   if(rost!==u&&!confirm(`${rost} is rostered on this ${currentShift().toLowerCase()} shift, not ${u}. Sign on anyway (covering)?`))return;
@@ -328,7 +337,72 @@ $("lockform").onsubmit=async e=>{
        !confirm(c.user+" hasn't submitted a handover this shift. Sign them off anyway?"))return;
     c.off=new Date().toISOString();c.offBy=u;ss.log.push(c);ss.cur=null}
   if(!ss.cur)ss.cur={user:u,at:new Date().toISOString(),shiftKey:here()};
-  ssave();$("lock").style.display="none";defaults();render()};
+  ssave();pushShift();$("lock").style.display="none";defaults();render()};
+// ---- cross-device sync (Supabase handover_sync table) ----
+const SOUT="sync.out.v1", SLAST="sync.last.v1";
+let out=JSON.parse(localStorage.getItem(SOUT)||"[]"), lastSync=localStorage.getItem(SLAST)||"";
+let applying=false, flushing=false, pullOk=null;
+const osave=()=>localStorage.setItem(SOUT,JSON.stringify(out));
+function syncUI(){
+  const s=$("sync");if(!sb){s.textContent="";return}
+  s.textContent=out.length?"⇡ "+out.length+" to sync":pullOk===false?"⚠ sync offline":pullOk?"☁ synced":"";
+  s.style.color=out.length||pullOk===false?"#7a2a2a":"#3a6"}
+function qpush(id,kind,value){
+  if(applying)return;
+  out=out.filter(o=>o.id!==id);out.push({id,kind,value});osave();syncUI();flush()}
+function pushH(h){qpush("handover:"+h.id,"handover",h)}
+function pushT(t){qpush("task:"+t.id,"task",t)}
+function pushDel(id,kind){qpush(id,kind,{deleted:true})}
+function pushPin(u){qpush("pin:"+u,"pin",{hash:pins[u]})}
+function pushShift(){qpush("shift:current","shift",{cur:ss.cur})}
+async function flush(){
+  if(!sb||flushing||!out.length||!navigator.onLine)return;
+  flushing=true;
+  try{while(out.length){
+    const b=out.slice(0,50);
+    const {error}=await sb.from("handover_sync").upsert(b.map(o=>({id:o.id,kind:o.kind,value:o.value})));
+    if(error)break;
+    out.splice(0,b.length);osave()}}
+  finally{flushing=false;syncUI()}}
+function applyRow(r){
+  const v=r.value||{};
+  if(r.kind==="handover"){const id=+r.id.slice(9);
+    data=data.filter(h=>h.id!==id);
+    if(!v.deleted){data.push(v);data.sort((a,b)=>b.id-a.id)}}
+  else if(r.kind==="task"){const id=+r.id.slice(5);
+    tasks=tasks.filter(t=>t.id!==id);
+    if(!v.deleted){tasks.push(v);tasks.sort((a,b)=>a.id-b.id)}}
+  else if(r.kind==="pin"){const u=r.id.slice(4);if(v.hash)pins[u]=v.hash}
+  else if(r.kind==="shift")ss.cur=v.cur||null}
+async function pull(){
+  if(!sb||!navigator.onLine){syncUI();return}
+  const first=!lastSync;
+  let q=sb.from("handover_sync").select("id,kind,value,updated_at").order("updated_at",{ascending:true}).limit(1000);
+  if(lastSync)q=q.gt("updated_at",lastSync);
+  const {data:rows,error}=await q;
+  if(error){pullOk=false;syncUI();return}
+  pullOk=true;
+  const pend=new Set(out.map(o=>o.id)), seen=new Set(), prevCur=JSON.stringify(ss.cur);
+  applying=true;
+  for(const r of rows){seen.add(r.id);lastSync=r.updated_at;if(!pend.has(r.id))applyRow(r)}
+  applying=false;
+  if(!lastSync)lastSync="1970-01-01T00:00:00+00:00";
+  localStorage.setItem(SLAST,lastSync);
+  if(first){ // seed server with anything this device already had
+    data.forEach(h=>{if(!seen.has("handover:"+h.id))pushH(h)});
+    tasks.forEach(t=>{if(!seen.has("task:"+t.id))pushT(t)});
+    Object.keys(pins).forEach(u=>{if(!seen.has("pin:"+u))pushPin(u)});
+    if(ss.cur&&!seen.has("shift:current"))pushShift()}
+  if(!rows.length){syncUI();return}
+  save();tsave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
+  if(JSON.stringify(ss.cur)!==prevCur){ // signed on/off from another device
+    if(ss.cur&&$("lock").style.display==="flex"){$("lock").style.display="none";defaults()}
+    if(!ss.cur&&$("lock").style.display!=="flex")openLock()}
+  render();flush();syncUI()}
+window.addEventListener("online",()=>{flush();pull()});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
+setInterval(pull,20000);
+pull();flush();syncUI();
 defaults();render();setInterval(render,60000);
 if(!ss.cur)openLock();
 </script>
