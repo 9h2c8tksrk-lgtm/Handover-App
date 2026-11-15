@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shift Handover</title>
+<script src="https://unpkg.com/html5-qrcode"></script>
 <style>
 *{box-sizing:border-box}
 body{font-family:system-ui,sans-serif;margin:0;background:#1b1f24;color:#eee}
@@ -42,11 +43,21 @@ table.r{border-collapse:collapse;width:100%;font-size:.8rem;margin-top:10px}
 table.r th,table.r td{border:1px solid #3a424b;padding:5px;text-align:center}
 table.r .D{background:#5a4a12}table.r .N{background:#1f3560}table.r .O{background:#1f242a;color:#777}
 table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
+#scanbox{position:fixed;inset:0;background:#000d;z-index:20;display:none;align-items:center;justify-content:center;padding:12px}
+#scanbox .card{width:100%;max-width:420px}
+#scanmsg{min-height:2.4em;margin:8px 0;color:#6bd68a}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 </style>
 </head>
 <body>
 <header><h1>🔧 Shift Handover</h1><div id="who"><span id="now"></span><span id="onshift"></span><button id="signoff" class="sec">Sign off</button></div></header>
+<div id="scanbox"><div class="card">
+  <h2>Scan parts to order</h2>
+  <div id="reader"></div>
+  <div id="scanmsg">Point the camera at a barcode. Repeat scans add to the quantity.</div>
+  <div class="row"><input id="manual" placeholder="Or type barcode / part no."><button type="button" id="manualadd" style="flex:0 0 auto">Add</button></div>
+  <div class="actions"><button type="button" class="sec" id="scandone">Done</button></div>
+</div></div>
 <div id="lock"><form class="card" id="lockform">
   <h2>Sign on to shift</h2>
   <div id="lockinfo" style="margin-bottom:8px"></div>
@@ -62,6 +73,8 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 
 <div class="card">
   <h2>📋 Day planner – to do &amp; to order</h2>
+  <div class="actions" style="margin:0 0 10px"><button type="button" id="tscan">📷 Scan part to order</button>
+  <a href="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/" target="_blank" rel="noopener"><button type="button" class="sec">🔩 Open Parts Tracker</button></a></div>
   <form id="tform" class="row" style="align-items:stretch">
     <select id="ttype" style="flex:0 0 120px"><option value="task">Task</option><option value="order">Order part</option></select>
     <input id="ttext" placeholder="Add item…" required style="flex:3">
@@ -158,7 +171,7 @@ $("form").onsubmit=e=>{
   data.unshift({id:Date.now(),created:new Date().toISOString(),from:$("from").value,to:$("to").value,
     shift:$("shift").value,date:$("date").value,inprog:$("inprog").value,done:$("done").value,
     parts:$("parts").value,equip:$("equip").value,safety:$("safety").value,notes:$("notes").value,
-    open:tasks.filter(t=>!t.done).map(t=>(t.type==="order"?"ORDER: ":"")+t.text),
+    open:tasks.filter(t=>!t.done).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")),
     checks:chk.filter(c=>c.checked).length+"/"+chk.length,ack:null});
   save();$("form").reset();render();window.scrollTo(0,0);
 };
@@ -195,7 +208,7 @@ function renderTasks(){
   const open=tasks.filter(t=>!t.done), done=tasks.filter(t=>t.done&&t.doneShift===cur);
   const row=t=>{const roll=!t.done&&t.shiftKey!==cur;
     return `<div class="task ${t.done?"done":""}"><input type="checkbox" data-tick="${t.id}" ${t.done?"checked":""}>
-    <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}</span>
+    <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}${t.qty>1?" ×"+t.qty:""}</span>
     <small class="m">Added by ${t.by} – ${t.shiftKey}${t.done?` • done by ${t.doneBy}`:""}</small></div>
     <button class="sec" data-tdel="${t.id}">✕</button></div>`};
   $("tasks").innerHTML=(open.length?open.map(row).join(""):"<p>Nothing outstanding 🎉</p>")
@@ -222,6 +235,33 @@ $("export").onclick=()=>{const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));
   a.download="handovers.json";a.click()};
 $("clear").onclick=()=>{if(confirm("Delete ALL handovers?")){data=[];save();render()}};
+// ---- barcode scan to order ----
+const PT="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/";
+let parts=null,scanner=null,lastScan={c:"",t:0};
+async function loadParts(){
+  if(parts)return parts;
+  try{parts=await(await fetch(PT+"master_parts_list.json")).json();localStorage.setItem("parts.cache",JSON.stringify(parts))}
+  catch{parts=JSON.parse(localStorage.getItem("parts.cache")||"[]")}
+  return parts}
+function addOrder(raw){
+  const code=raw.trim();if(!code)return;
+  const p=parts.find(x=>String(x.Barcode).toLowerCase()===code.toLowerCase());
+  const ex=tasks.find(t=>!t.done&&t.type==="order"&&t.code===code);
+  if(ex)ex.qty++;
+  else tasks.push({id:Date.now(),type:"order",code,qty:1,by:$("from").value,shiftKey:here(),done:false,
+    text:p?`${p.PartName} (${code})`:`Unknown part (${code})`});
+  tsave();render();
+  $("scanmsg").textContent=(p?"✔ ":"⚠ Not in parts list: ")+(p?p.PartName:code)+(ex?" – qty "+ex.qty:" added")}
+$("tscan").onclick=async()=>{
+  if(!window.Html5Qrcode){alert("Scanner needs an internet connection. You can still type the item in.");return}
+  await loadParts();$("scanbox").style.display="flex";
+  scanner=new Html5Qrcode("reader");
+  scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:260,height:150}},c=>{
+    if(c===lastScan.c&&Date.now()-lastScan.t<3000)return;lastScan={c,t:Date.now()};addOrder(c)})
+    .catch(e=>$("scanmsg").textContent="Camera unavailable ("+e+"). Type the code below.")};
+$("manualadd").onclick=()=>{addOrder($("manual").value);$("manual").value=""};
+$("scandone").onclick=()=>{$("scanbox").style.display="none";
+  if(scanner)scanner.stop().then(()=>scanner.clear()).catch(()=>{});scanner=null};
 // ---- sign on / off ----
 const SKEY="shift.v1", PKEY="pins.v1";
 let ss=JSON.parse(localStorage.getItem(SKEY)||'{"cur":null,"log":[]}');
