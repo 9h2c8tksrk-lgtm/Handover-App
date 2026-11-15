@@ -38,6 +38,10 @@ button.sec{background:#3a424b;color:#eee}
 #lock .err{color:#ff6b6b;min-height:1.2em;margin:8px 0}
 #banner .card{background:#7a2a2a}
 #who{display:flex;gap:8px;align-items:center}#who button{padding:5px 10px;font-size:.85rem}
+table.r{border-collapse:collapse;width:100%;font-size:.8rem;margin-top:10px}
+table.r th,table.r td{border:1px solid #3a424b;padding:5px;text-align:center}
+table.r .D{background:#5a4a12}table.r .N{background:#1f3560}table.r .O{background:#1f242a;color:#777}
+table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 </style>
 </head>
@@ -92,6 +96,11 @@ button.sec{background:#3a424b;color:#eee}
   <div class="actions"><button type="submit">Submit handover</button><button type="reset" class="sec">Clear</button></div>
 </form>
 
+<details class="card" id="rosterbox">
+  <summary><b style="color:#e8a317">📅 Roster – 7 days, 7 nights, 7 off</b> <span id="rtoday"></span></summary>
+  <div id="roster" style="overflow-x:auto"></div>
+</details>
+
 <div class="card">
   <h2>History</h2>
   <div class="actions"><button class="sec" id="export">Export JSON</button><button class="sec" id="clear">Clear all</button></div>
@@ -117,9 +126,29 @@ function defaults(){
   if(ss.cur)$("from").value=ss.cur.user;
   $("shift").value=currentShift();$("date").value=shiftDate();setTo();
 }
-function setTo(){ // default: next person in rotation
-  const i=CREW.indexOf($("from").value);$("to").value=CREW[(i+1)%CREW.length]}
+// 21-day cycle: 7 days, 7 nights, 7 off. Offsets from Tue 17 Nov 2026 (Carl's first day shift).
+const REF=new Date(2026,10,17), OFFSET={Carl:0,Lockie:7,Declan:14};
+const parseD=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
+const fmtD=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+function pos(n,d){const k=Math.round((d-REF)/864e5);return (((k+OFFSET[n])%21)+21)%21}
+function status(n,d){const p=pos(n,d);return p<7?"D":p<14?"N":"O"}
+function whoOn(d,sh){return CREW.find(n=>status(n,d)===(sh==="Day"?"D":"N"))}
+function setTo(){ // default: whoever is rostered on the next shift
+  const d=parseD($("date").value),sh=$("shift").value;
+  $("to").value=sh==="Day"?whoOn(d,"Night"):whoOn(addDays(d,1),"Day")}
+const NOTE={0:"first day shift",6:"last day shift",7:"first night shift",13:"last night shift – then 7 days off"};
+function renderRoster(){
+  const t=parseD(shiftDate()),sh=currentShift();
+  $("rtoday").textContent=`— now: Day ${whoOn(t,"Day")}, Night ${whoOn(t,"Night")}`;
+  let h="<table class='r'><tr><th>Date</th>"+CREW.map(n=>`<th>${n}</th>`).join("")+"</tr>";
+  for(let i=-1;i<21;i++){const d=addDays(t,i);
+    h+=`<tr class="${i===0?"today":""}"><th>${d.toLocaleDateString([],{weekday:"short",day:"numeric",month:"short"})}</th>`+
+      CREW.map(n=>{const st=status(n,d),p=pos(n,d);
+        return `<td class="${st}">${{D:"Day",N:"Night",O:"Off"}[st]}${NOTE[p]?`<br><small>${NOTE[p]}</small>`:""}</td>`}).join("")+"</tr>"}
+  $("roster").innerHTML=h+"</table>"}
 $("from").disabled=true;
+$("shift").onchange=$("date").onchange=setTo;
 $("form").addEventListener("reset",()=>setTimeout(defaults));
 
 $("form").onsubmit=e=>{
@@ -154,7 +183,7 @@ function render(){
   const p=data.filter(h=>h.to===me&&!h.ack);
   $("pending").innerHTML=p.length?`<div class="card"><h2>⚠ Handovers waiting for ${me} (${p.length})</h2>${p.map(entry).join("")}</div>`:"";
   $("history").innerHTML=data.length?data.map(entry).join(""):"<p>No handovers yet.</p>";
-  renderTasks();
+  renderTasks();renderRoster();
   $("onshift").textContent=ss.cur?"👤 "+ss.cur.user+" since "+new Date(ss.cur.at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"";
   $("signoff").style.display=ss.cur?"":"none";
   $("banner").innerHTML=ss.cur&&ss.cur.shiftKey!==here()?`<div class="card"><h2 style="color:#fff">⏰ Shift change – ${ss.cur.user} is still signed on from ${ss.cur.shiftKey}</h2><p>Finish the handover, then the incoming person signs on.</p><button id="bsign">Sign on for ${here()}</button></div>`:"";
@@ -219,6 +248,8 @@ $("lockform").onsubmit=async e=>{
   const hp=await hash(pin);
   if(!pins[u]){if(pin!==$("spin2").value)return err("PINs don't match");pins[u]=hp;localStorage.setItem(PKEY,JSON.stringify(pins))}
   else if(pins[u]!==hp)return err("Wrong PIN");
+  const rost=whoOn(parseD(shiftDate()),currentShift());
+  if(rost!==u&&!confirm(`${rost} is rostered on this ${currentShift().toLowerCase()} shift, not ${u}. Sign on anyway (covering)?`))return;
   const c=ss.cur;
   if(c&&(c.user!==u||c.shiftKey!==here())){
     if(c.user!==u&&!data.some(h=>h.from===c.user&&h.created>=c.at)&&
