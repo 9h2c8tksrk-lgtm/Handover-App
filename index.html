@@ -304,6 +304,7 @@ async function hash(pin){
     return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
   let h=5381;for(const c of t)h=(h*33)^c.charCodeAt(0);return "d"+(h>>>0)}
 CREW.forEach(n=>$("su").add(new Option(n,n)));
+function openLock(){$("su").value=whoOn(parseD(shiftDate()),currentShift());showLock()}
 function showLock(){
   $("lockinfo").textContent=ss.cur?`${ss.cur.user} is on shift. Signing on will sign them off.`:"Nobody is signed on.";
   $("spin").value=$("spin2").value="";$("lockerr").textContent="";
@@ -311,8 +312,8 @@ function showLock(){
   $("lock").style.display="flex";$("spin").focus()}
 $("su").onchange=showLock;
 $("signoff").onclick=()=>{if(!confirm("Sign off "+ss.cur.user+"?"))return;
-  ss.cur.off=new Date().toISOString();ss.log.push(ss.cur);ss.cur=null;ssave();render();showLock()};
-document.addEventListener("click",e=>{if(e.target.id==="bsign")showLock()});
+  ss.cur.off=new Date().toISOString();ss.log.push(ss.cur);ss.cur=null;ssave();render();openLock()};
+document.addEventListener("click",e=>{if(e.target.id==="bsign")openLock()});
 $("lockform").onsubmit=async e=>{
   e.preventDefault();const u=$("su").value,pin=$("spin").value,err=m=>$("lockerr").textContent=m;
   if(!/^\d{4,6}$/.test(pin))return err("PIN must be 4–6 digits");
@@ -329,7 +330,7 @@ $("lockform").onsubmit=async e=>{
   if(!ss.cur)ss.cur={user:u,at:new Date().toISOString(),shiftKey:here()};
   ssave();$("lock").style.display="none";defaults();render()};
 defaults();render();setInterval(render,60000);
-if(!ss.cur)showLock();
+if(!ss.cur)openLock();
 </script>
 </body>
 </html>
