@@ -16,7 +16,7 @@ main{max-width:760px;margin:0 auto;padding:12px}
 h2{margin:0 0 10px;font-size:1.05rem;color:#e8a317}
 label{display:block;font-size:.85rem;margin:10px 0 4px;color:#bbb}
 input,select,textarea{width:100%;padding:10px;font-size:1rem;border-radius:6px;border:1px solid #444;background:#12161a;color:#eee}
-textarea{min-height:80px}
+textarea{min-height:80px;resize:none;overflow:hidden}
 .row{display:flex;gap:10px}.row>*{flex:1}
 button{padding:11px 16px;font-size:1rem;border:0;border-radius:6px;background:#e8a317;color:#111;font-weight:600;cursor:pointer}
 button.sec{background:#3a424b;color:#eee}
@@ -241,6 +241,10 @@ $("export").onclick=()=>{const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));
   a.download="handovers.json";a.click()};
 $("clear").onclick=()=>{if(confirm("Delete ALL handovers?")){data=[];save();render()}};
+// ---- auto-grow textareas ----
+const grow=t=>{t.style.height="auto";t.style.height=t.scrollHeight+2+"px"};
+document.addEventListener("input",e=>{if(e.target.tagName==="TEXTAREA")grow(e.target)});
+$("form").addEventListener("reset",()=>setTimeout(()=>document.querySelectorAll("textarea").forEach(grow)));
 // ---- barcode scan to order ----
 const PT="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/";
 let parts=null,scanner=null,lastScan={c:"",t:0};
