@@ -66,7 +66,8 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
   <div class="actions"><button type="button" class="sec" id="scandone">Done</button></div>
 </div></div>
 <div id="etabox"><div class="card">
-  <h2>📦 Parts on order – ETA</h2>
+  <h2>📦 Special order parts – ETA</h2>
+  <p style="font-size:.8rem;color:#aaa;margin:0 0 8px">Special order parts only. Update the ETA if it changes and tick parts off when they're delivered.</p>
   <form id="eform">
     <div class="row">
       <div><label>Asset number</label><input id="easset" placeholder="e.g. LD123"></div>
@@ -95,7 +96,7 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 <div class="card">
   <h2>📋 Day planner – to do &amp; to order</h2>
   <div class="actions" style="margin:0 0 10px"><button type="button" id="tscan">📷 Scan part to order</button>
-  <button type="button" class="sec" id="etaopen">📦 Parts ETA</button>
+  <button type="button" class="sec" id="etaopen">📦 Special order ETA</button>
   <a href="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/" target="_blank" rel="noopener"><button type="button" class="sec">🔩 Open Parts Tracker</button></a></div>
   <form id="tform" class="row" style="align-items:stretch">
     <select id="ttype" style="flex:0 0 120px"><option value="task">Task</option><option value="order">Order part</option></select>
@@ -356,17 +357,24 @@ let etas=JSON.parse(localStorage.getItem(EKEY)||"[]");
 const esave=()=>localStorage.setItem(EKEY,JSON.stringify(etas));
 function pushE(x){qpush("eta:"+x.id,"eta",x)}
 function renderEtas(){
-  $("etaopen").textContent="📦 Parts ETA"+(etas.length?" ("+etas.length+")":"");
+  const open=etas.filter(x=>!x.delivered);
+  $("etaopen").textContent="📦 Special order ETA"+(open.length?" ("+open.length+")":"");
   if($("etabox").style.display!=="flex")return;
   const today=fmtD(new Date());
-  $("etalist").innerHTML=[...etas].sort((a,b)=>a.eta<b.eta?-1:a.eta>b.eta?1:a.id-b.id).map(x=>{
-    const late=x.eta<today,due=x.eta===today;
+  $("etalist").innerHTML=[...etas].sort((a,b)=>
+    (a.delivered?1:0)-(b.delivered?1:0)||(a.eta<b.eta?-1:a.eta>b.eta?1:a.id-b.id)).map(x=>{
+    const late=!x.delivered&&x.eta<today,due=!x.delivered&&x.eta===today;
     const eta=parseD(x.eta).toLocaleDateString([],{weekday:"short",day:"numeric",month:"short",year:"numeric"});
-    return `<div class="entry"><b>${esc(x.part)}</b>${x.desc?" — "+esc(x.desc):""}<br>
+    return `<div class="entry"${x.delivered?' style="opacity:.55"':""}><b>${esc(x.part)}</b>${x.desc?" — "+esc(x.desc):""}<br>
     <small>${x.asset?"Asset "+esc(x.asset):""}${x.asset&&x.wo?" • ":""}${x.wo?"WO "+esc(x.wo):""}${x.asset||x.wo?" • ":""}added by ${esc(x.by)} – ${x.shiftKey}</small><br>
-    <b class="${late?"flag":due?"ack":""}">ETA ${eta}${late?" – OVERDUE":due?" – due today":""}</b>
-    <div class="actions"><button class="sec" data-edel="${x.id}">Delete</button></div></div>`}).join("")
-    ||"<p>No parts on order.</p>"}
+    ${x.delivered?`<b class="ack">✔ Delivered ${parseD(x.delivered).toLocaleDateString([],{weekday:"short",day:"numeric",month:"short"})}${x.deliveredBy?" by "+esc(x.deliveredBy):""}</b>`
+      :`<b class="${late?"flag":due?"ack":""}">ETA ${eta}${late?" – OVERDUE":due?" – due today":""}</b>`}
+    <div class="actions" style="align-items:center">
+      <label class="check" style="margin:0;flex:0 0 auto"><input type="checkbox" data-edone="${x.id}"${x.delivered?" checked":""}> Delivered</label>
+      ${x.delivered?"":`<label style="margin:0;display:flex;align-items:center;gap:6px;font-size:.8rem;flex:0 0 auto">Update ETA
+        <input type="date" data-eupd="${x.id}" value="${x.eta}" style="width:auto;padding:5px"></label>`}
+      <button class="sec" data-edel="${x.id}" style="margin-left:auto;padding:5px 10px;font-size:.85rem">Delete</button></div></div>`}).join("")
+    ||"<p>No special order parts on order.</p>"}
 $("etaopen").onclick=()=>{$("etabox").style.display="flex";renderEtas();$("easset").focus()};
 $("etaclose").onclick=()=>$("etabox").style.display="none";
 $("eform").onsubmit=e=>{e.preventDefault();
@@ -375,8 +383,16 @@ $("eform").onsubmit=e=>{e.preventDefault();
     by:$("from").value,shiftKey:here()};
   etas.push(x);esave();pushE(x);$("eform").reset();renderEtas()};
 document.addEventListener("click",e=>{const id=e.target.dataset.edel;if(!id)return;
-  if(!confirm("Remove this part (arrived / no longer needed)?"))return;
+  if(!confirm("Remove this part completely (no longer needed)? Tick 'Delivered' instead if it arrived."))return;
   etas=etas.filter(x=>x.id!=id);esave();pushDel("eta:"+id,"eta");renderEtas()});
+document.addEventListener("change",e=>{
+  const done=e.target.dataset.edone, upd=e.target.dataset.eupd;
+  if(done){const x=etas.find(x=>x.id==done);if(!x)return;
+    if(e.target.checked){x.delivered=fmtD(new Date());x.deliveredBy=$("from").value}
+    else{delete x.delivered;delete x.deliveredBy}
+    esave();pushE(x);renderEtas()}
+  else if(upd){const x=etas.find(x=>x.id==upd);if(!x||!e.target.value)return;
+    x.eta=e.target.value;esave();pushE(x);renderEtas()}});
 // ---- sign on / off ----
 const SKEY="shift.v1", PKEY="pins.v1";
 let ss=JSON.parse(localStorage.getItem(SKEY)||'{"cur":null,"log":[]}');
