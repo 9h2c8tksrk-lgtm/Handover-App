@@ -51,11 +51,16 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 @media (min-width:1300px){
   #etacard{position:fixed;top:70px;left:calc(50% + 396px);right:16px;max-width:360px;max-height:calc(100vh - 90px);overflow-y:auto;z-index:5}
+  #lxcard{position:fixed;top:70px;right:calc(50% + 396px);left:16px;max-width:360px;z-index:5;margin-left:auto}
 }
+#lxcard.lx-watch{background:#6b5412}
+#lxcard.lx-danger{background:#7a2a2a}
+#lxcard.lx-danger h2{color:#fff}
+#lxcard small{color:#bbb}
 </style>
 </head>
 <body>
-<header><h1>🔧 Shift Handover</h1><div id="who"><span id="sync" style="font-size:.8rem"></span><span id="now"></span><span id="onshift"></span><button id="supview" class="sec" style="display:none">👁 Handovers view</button><button id="signoff" class="sec">Sign off</button></div></header>
+<header><h1>🔧 Shift Handover</h1><div id="who"><span id="sync" style="font-size:.8rem"></span><span id="now"></span><span id="onshift"></span><button id="supview" class="sec" style="display:none">👁 Handovers view</button><button id="signon" class="sec">Sign on</button><button id="signoff" class="sec">Sign off</button></div></header>
 <div id="scanbox"><div class="card">
   <h2>Scan parts to order</h2>
   <div id="reader"></div>
@@ -84,15 +89,20 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
   <div id="etalist"></div>
 </div></div>
 <div id="lock"><form class="card" id="lockform">
-  <h2>Sign on to shift</h2>
+  <h2 id="locktitle">Sign on to shift</h2>
   <div id="lockinfo" style="margin-bottom:8px"></div>
   <label>Name</label><select id="su"></select>
   <label>PIN (4–6 digits)</label><input id="spin" type="password" inputmode="numeric" autocomplete="off" maxlength="6">
   <div id="newpin" style="display:none"><label>First time – confirm new PIN</label><input id="spin2" type="password" inputmode="numeric" autocomplete="off" maxlength="6"></div>
   <div class="err" id="lockerr"></div>
-  <button style="width:100%">Sign on</button>
+  <button id="locksub" style="width:100%">Sign on</button>
+  <button type="button" id="lockcancel" class="sec" style="width:100%;margin-top:8px;display:none">Cancel</button>
 </form></div>
 <main>
+<div class="card" id="lxcard" style="display:none">
+  <h2>⚡ Lightning – Golden Eagle</h2>
+  <div id="lxbody" style="font-size:.9rem"></div>
+</div>
 <div class="card" id="etacard" style="display:none">
   <h2 style="display:flex;align-items:center;justify-content:space-between">📦 Special orders – awaiting delivery
     <button type="button" class="sec" id="etamanage" style="padding:5px 10px;font-size:.8rem">Update / tick off</button></h2>
@@ -174,7 +184,7 @@ function shiftDate(d=new Date()){const x=new Date(d);if(d.getHours()<5)x.setDate
 
 USERS.forEach(n=>{$("from").add(new Option(n,n));$("to").add(new Option(n,n));$("tassign").add(new Option(n,n))});
 function defaults(){
-  if(ss.cur)$("from").value=ss.cur.user;
+  if(ss.on.length)$("from").value=ss.on[ss.on.length-1].user;
   $("shift").value=currentShift();$("date").value=shiftDate();setTo();
 }
 // 21-day cycle: 7 days, 7 nights, 7 off. Offsets from Tue 17 Nov 2026 (Carl's first day shift).
@@ -257,9 +267,11 @@ function render(){
   $("pending").innerHTML=p.length?`<div class="card"><h2>⚠ Handovers waiting for ${me} (${p.length})</h2>${p.map(entry).join("")}</div>`:"";
   $("history").innerHTML=data.length?data.map(entry).join(""):"<p>No handovers yet.</p>";
   renderTasks();renderRoster();renderEtas();
-  $("onshift").textContent=ss.cur?"👤 "+ss.cur.user+" since "+new Date(ss.cur.at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"";
-  $("signoff").style.display=ss.cur?"":"none";
-  $("banner").innerHTML=ss.cur&&ss.cur.shiftKey!==here()?`<div class="card"><h2 style="color:#fff">⏰ Shift change – ${ss.cur.user} is still signed on from ${ss.cur.shiftKey}</h2><p>Finish the handover, then the incoming person signs on.</p><button id="bsign">Sign on for ${here()}</button></div>`:"";
+  $("onshift").textContent=ss.on.length?"👤 "+ss.on.map(c=>c.user+" "+new Date(c.at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})).join(", "):"";
+  $("signoff").style.display=ss.on.length?"":"none";
+  $("signon").style.display=ss.on.length?"":"none";
+  const stale=ss.on.filter(c=>c.shiftKey!==here());
+  $("banner").innerHTML=stale.length?`<div class="card"><h2 style="color:#fff">⏰ Shift change – ${stale.map(c=>c.user).join(", ")} ${stale.length>1?"are":"is"} still signed on from ${stale[0].shiftKey}</h2><p>Finish the handover and sign off, then the incoming person signs on.</p><button id="bsign">Sign on for ${here()}</button></div>`:"";
   $("now").textContent=currentShift()+" shift • "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
 }
 const here=()=>currentShift()+" "+shiftDate();
@@ -458,9 +470,68 @@ document.addEventListener("change",e=>{
     esave();pushE(x);renderEtas()}
   else if(upd){const x=etas.find(x=>x.id==upd);if(!x||!e.target.value)return;
     x.eta=e.target.value;esave();pushE(x);renderEtas()}});
+// ---- lightning warning (Golden Eagle mine site) ----
+// Live strikes: Blitzortung.org community network. Backup: Open-Meteo thunderstorm forecast.
+const LX={lat:-21.9662,lon:120.1201,watch:20,danger:5}; // km rings
+let lxWs=null,lxOk=false,lxSrv=0,lxStrikes=[],lxFc=null;
+const lxDist=(la,lo)=>{const p=Math.PI/180,
+  a=Math.sin((la-LX.lat)*p/2)**2+Math.cos(la*p)*Math.cos(LX.lat*p)*Math.sin((lo-LX.lon)*p/2)**2;
+  return 12742*Math.asin(Math.sqrt(a))};
+function lxDecode(b){ // LZW decoder for Blitzortung websocket frames
+  const e={},d=(b+"").split(""),g=[d[0]];let c=d[0],f=c,o=256;
+  for(let i=1;i<d.length;i++){
+    let a=d[i].charCodeAt(0);
+    a=256>a?d[i]:e[a]?e[a]:f+c;
+    g.push(a);c=a.charAt(0);e[o++]=f+c;f=a}
+  return g.join("")}
+function lxConnect(){
+  if(lxWs||!navigator.onLine)return;
+  try{lxWs=new WebSocket(["wss://ws1.blitzortung.org/","wss://ws7.blitzortung.org/","wss://ws8.blitzortung.org/"][lxSrv%3])}
+  catch{lxSrv++;return}
+  lxWs.onopen=()=>{lxOk=true;lxWs.send('{"a":111}');renderLx()};
+  lxWs.onmessage=m=>{
+    try{const s=JSON.parse(lxDecode(m.data));
+      if(typeof s.lat!=="number"||Math.abs(s.lat-LX.lat)>0.3||Math.abs(s.lon-LX.lon)>0.3)return;
+      const d=lxDist(s.lat,s.lon);
+      if(d<=LX.watch){lxStrikes.push({t:Date.now(),d});renderLx()}}catch{}};
+  lxWs.onclose=lxWs.onerror=()=>{
+    if(!lxWs)return;
+    lxWs=null;lxOk=false;lxSrv++;renderLx();setTimeout(lxConnect,30000)};
+}
+async function lxForecast(){
+  if(!navigator.onLine)return;
+  try{const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LX.lat}&longitude=${LX.lon}&hourly=weather_code&forecast_hours=12&timezone=auto`);
+    const j=await r.json();
+    const i=j.hourly.weather_code.findIndex(c=>c===95||c===96||c===99);
+    lxFc=i>=0?j.hourly.time[i]:null}
+  catch{lxFc=null}
+  renderLx()}
+function renderLx(){
+  const now=Date.now();
+  lxStrikes=lxStrikes.filter(s=>now-s.t<30*60000);
+  const danger=lxStrikes.filter(s=>s.d<=LX.danger);
+  const hit=danger.length?danger:lxStrikes;
+  const card=$("lxcard");let cls="",html="";
+  if(hit.length){
+    cls=danger.length?"lx-danger":"lx-watch";
+    const near=Math.min(...hit.map(s=>s.d)).toFixed(1);
+    const ago=Math.round((now-Math.max(...hit.map(s=>s.t)))/60000);
+    html=`<b>${danger.length?"⛔ DANGER – lightning within "+LX.danger+" km of site":"⚠ Lightning within "+LX.watch+" km of site"}</b><br>
+      ${hit.length} strike${hit.length>1?"s":""} in the last 30 min • nearest ${near} km • last ${ago<1?"<1":ago} min ago`}
+  else if(lxFc)
+    html=`🌩 Thunderstorms forecast near site from ${new Date(lxFc).toLocaleString([],{weekday:"short",hour:"2-digit",minute:"2-digit"})}`;
+  if(html&&!lxOk)html+=`<br><small>⚠ live strike feed offline – forecast only</small>`;
+  card.className="card "+cls;
+  card.style.display=html?"":"none";
+  $("lxbody").innerHTML=html}
+lxConnect();lxForecast();
+setInterval(renderLx,60000);
+setInterval(lxForecast,15*60000);
+window.addEventListener("online",lxConnect);
 // ---- sign on / off ----
 const SKEY="shift.v1", PKEY="pins.v1";
-let ss=JSON.parse(localStorage.getItem(SKEY)||'{"cur":null,"log":[]}');
+let ss=JSON.parse(localStorage.getItem(SKEY)||'{"on":[],"log":[]}');
+if(!Array.isArray(ss.on)){ss.on=ss.cur?[ss.cur]:[];delete ss.cur} // migrate old single-user format
 const pins=JSON.parse(localStorage.getItem(PKEY)||"{}");
 const ssave=()=>localStorage.setItem(SKEY,JSON.stringify(ss));
 async function hash(pin){
@@ -469,15 +540,24 @@ async function hash(pin){
     return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
   let h=5381;for(const c of t)h=(h*33)^c.charCodeAt(0);return "d"+(h>>>0)}
 USERS.forEach(n=>$("su").add(new Option(n,n)));
-function openLock(){$("su").value=whoOn(parseD(shiftDate()),currentShift());showLock()}
+let lockOff=false; // false = sign on, true = sign off
+function fillSu(list){const su=$("su"),v=su.value;su.innerHTML="";list.forEach(n=>su.add(new Option(n,n)));if(list.includes(v))su.value=v}
+function openLock(off){lockOff=!!off;
+  if(lockOff)fillSu(ss.on.map(c=>c.user));
+  else{fillSu(USERS);$("su").value=whoOn(parseD(shiftDate()),currentShift())}
+  showLock()}
 function showLock(){
-  $("lockinfo").textContent=ss.cur?`${ss.cur.user} is on shift. Signing on will sign them off.`:"Nobody is signed on.";
+  $("locktitle").textContent=lockOff?"Sign off shift":"Sign on to shift";
+  $("locksub").textContent=lockOff?"Sign off":"Sign on";
+  $("lockinfo").textContent=ss.on.length?"On shift: "+ss.on.map(c=>c.user).join(", "):"Nobody is signed on.";
   $("spin").value=$("spin2").value="";$("lockerr").textContent="";
-  $("newpin").style.display=pins[$("su").value]?"none":"block";
+  $("newpin").style.display=lockOff||pins[$("su").value]?"none":"block";
+  $("lockcancel").style.display=ss.on.length?"":"none";
   $("lock").style.display="flex";$("spin").focus()}
 $("su").onchange=showLock;
-$("signoff").onclick=()=>{if(!confirm("Sign off "+ss.cur.user+"?"))return;
-  ss.cur.off=new Date().toISOString();ss.log.push(ss.cur);ss.cur=null;ssave();pushShift();render();openLock()};
+$("signon").onclick=()=>openLock();
+$("signoff").onclick=()=>openLock(true);
+$("lockcancel").onclick=()=>{if(ss.on.length)$("lock").style.display="none"};
 document.addEventListener("click",e=>{if(e.target.id==="bsign")openLock()});
 $("lockform").onsubmit=async e=>{
   e.preventDefault();const u=$("su").value,pin=$("spin").value,err=m=>$("lockerr").textContent=m;
@@ -486,16 +566,21 @@ $("lockform").onsubmit=async e=>{
     try{const {data:pr}=await sb.from("handover_sync").select("value").eq("id","pin:"+u).maybeSingle();
       if(pr&&pr.value&&pr.value.hash){pins[u]=pr.value.hash;localStorage.setItem(PKEY,JSON.stringify(pins))}}catch{}}
   const hp=await hash(pin);
+  if(lockOff){ // each person signs themselves off with their own PIN
+    const c=ss.on.find(x=>x.user===u);
+    if(!c)return err(u+" isn't signed on");
+    if(!pins[u]||pins[u]!==hp)return err("Wrong PIN");
+    if(!data.some(h=>h.from===u&&h.created>=c.at)&&
+       !confirm(u+" hasn't submitted a handover this shift. Sign off anyway?"))return;
+    c.off=new Date().toISOString();ss.log.push(c);ss.on=ss.on.filter(x=>x!==c);
+    ssave();pushShift();render();
+    if(ss.on.length)$("lock").style.display="none";else openLock();
+    return}
   if(!pins[u]){if(pin!==$("spin2").value)return err("PINs don't match");pins[u]=hp;localStorage.setItem(PKEY,JSON.stringify(pins));pushPin(u)}
   else if(pins[u]!==hp)return err("Wrong PIN");
   const rost=whoOn(parseD(shiftDate()),currentShift());
-  if(rost!==u&&!confirm(`${rost} is rostered on this ${currentShift().toLowerCase()} shift, not ${u}. Sign on anyway (covering)?`))return;
-  const c=ss.cur;
-  if(c&&(c.user!==u||c.shiftKey!==here())){
-    if(c.user!==u&&!data.some(h=>h.from===c.user&&h.created>=c.at)&&
-       !confirm(c.user+" hasn't submitted a handover this shift. Sign them off anyway?"))return;
-    c.off=new Date().toISOString();c.offBy=u;ss.log.push(c);ss.cur=null}
-  if(!ss.cur)ss.cur={user:u,at:new Date().toISOString(),shiftKey:here()};
+  if(rost!==u&&!ss.on.some(c=>c.user===rost)&&!confirm(`${rost} is rostered on this ${currentShift().toLowerCase()} shift, not ${u}. Sign on anyway (covering)?`))return;
+  if(!ss.on.some(c=>c.user===u))ss.on.push({user:u,at:new Date().toISOString(),shiftKey:here()});
   ssave();pushShift();$("lock").style.display="none";defaults();render();ptAutoSignIn()};
 // ---- cross-device sync (Supabase handover_sync table) ----
 const SOUT="sync.out.v1", SLAST="sync.last.v1";
@@ -513,7 +598,7 @@ function pushH(h){qpush("handover:"+h.id,"handover",h)}
 function pushT(t){qpush("task:"+t.id,"task",t)}
 function pushDel(id,kind){qpush(id,kind,{deleted:true})}
 function pushPin(u){qpush("pin:"+u,"pin",{hash:pins[u]})}
-function pushShift(){qpush("shift:current","shift",{cur:ss.cur})}
+function pushShift(){qpush("shift:current","shift",{on:ss.on})}
 async function flush(){
   if(!sb||flushing||!out.length||!navigator.onLine)return;
   flushing=true;
@@ -536,7 +621,7 @@ function applyRow(r){
     etas=etas.filter(x=>x.id!==id);
     if(!v.deleted)etas.push(v)}
   else if(r.kind==="pin"){const u=r.id.slice(4);if(v.hash)pins[u]=v.hash}
-  else if(r.kind==="shift")ss.cur=v.cur||null}
+  else if(r.kind==="shift")ss.on=Array.isArray(v.on)?v.on:v.cur?[v.cur]:[]}
 async function pull(){
   if(!sb||!navigator.onLine){syncUI();return}
   const first=!lastSync;
@@ -545,7 +630,7 @@ async function pull(){
   const {data:rows,error}=await q;
   if(error){pullOk=false;syncUI();return}
   pullOk=true;
-  const pend=new Set(out.map(o=>o.id)), seen=new Set(), prevCur=JSON.stringify(ss.cur);
+  const pend=new Set(out.map(o=>o.id)), seen=new Set(), prevCur=JSON.stringify(ss.on);
   applying=true;
   for(const r of rows){seen.add(r.id);lastSync=r.updated_at;if(!pend.has(r.id))applyRow(r)}
   applying=false;
@@ -556,19 +641,19 @@ async function pull(){
     tasks.forEach(t=>{if(!seen.has("task:"+t.id))pushT(t)});
     etas.forEach(x=>{if(!seen.has("eta:"+x.id))pushE(x)});
     Object.keys(pins).forEach(u=>{if(!seen.has("pin:"+u))pushPin(u)});
-    if(ss.cur&&!seen.has("shift:current"))pushShift()}
+    if(ss.on.length&&!seen.has("shift:current"))pushShift()}
   if(!rows.length){syncUI();return}
   save();tsave();esave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
-  if(JSON.stringify(ss.cur)!==prevCur){ // signed on/off from another device
-    if(ss.cur&&$("lock").style.display==="flex"){$("lock").style.display="none";defaults()}
-    if(!ss.cur&&$("lock").style.display!=="flex")openLock()}
+  if(JSON.stringify(ss.on)!==prevCur){ // signed on/off from another device
+    if(!ss.on.length&&$("lock").style.display!=="flex")openLock();
+    else if($("lock").style.display==="flex")openLock(lockOff&&ss.on.length?true:false)}
   render();flush();syncUI()}
 window.addEventListener("online",()=>{flush();pull()});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
 setInterval(pull,20000);
 pull();flush();syncUI();
 defaults();render();setInterval(render,60000);
-if(!ss.cur)openLock();
+if(!ss.on.length)openLock();
 </script>
 </body>
 </html>
