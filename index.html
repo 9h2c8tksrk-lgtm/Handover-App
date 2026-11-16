@@ -518,11 +518,12 @@ function renderLx(){
     const ago=Math.round((now-Math.max(...hit.map(s=>s.t)))/60000);
     html=`<b>${danger.length?"⛔ DANGER – lightning within "+LX.danger+" km of site":"⚠ Lightning within "+LX.watch+" km of site"}</b><br>
       ${hit.length} strike${hit.length>1?"s":""} in the last 30 min • nearest ${near} km • last ${ago<1?"<1":ago} min ago`}
-  else if(lxFc)
-    html=`🌩 Thunderstorms forecast near site from ${new Date(lxFc).toLocaleString([],{weekday:"short",hour:"2-digit",minute:"2-digit"})}`;
-  if(html&&!lxOk)html+=`<br><small>⚠ live strike feed offline – forecast only</small>`;
+  else{
+    html=`✅ No strikes within ${LX.watch} km in the last 30 min`;
+    if(lxFc)html+=`<br>🌩 Thunderstorms forecast near site from ${new Date(lxFc).toLocaleString([],{weekday:"short",hour:"2-digit",minute:"2-digit"})}`}
+  html+=`<br><small>${lxOk?"Live strike feed connected":"⚠ Live strike feed offline – forecast only"}</small>`;
   card.className="card "+cls;
-  card.style.display=html?"":"none";
+  card.style.display="";
   $("lxbody").innerHTML=html}
 lxConnect();lxForecast();
 setInterval(renderLx,60000);

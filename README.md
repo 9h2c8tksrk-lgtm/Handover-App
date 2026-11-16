@@ -42,5 +42,6 @@ Eagle mine site (Nullagine, WA):
 - **Forecast backup** from the free Open-Meteo API (checked every 15 min):
   if thunderstorms are forecast at the site in the next 12 hours, the card
   shows when they're expected — and notes if the live strike feed is offline.
-- The card is hidden when there's nothing to warn about. Rings and site
-  coordinates are set in the `LX` constant in `index.html`.
+- The card is always visible: it shows a green all-clear ("no strikes within
+  20 km") and the live-feed connection status when there's no activity.
+  Rings and site coordinates are set in the `LX` constant in `index.html`.
