@@ -3,8 +3,8 @@
 -- (the same project index.html already connects to).
 
 create table if not exists public.handover_sync (
-  id text primary key,          -- e.g. handover:<id>, task:<id>, pin:<name>, shift:current
-  kind text not null,           -- handover | task | pin | shift
+  id text primary key,          -- e.g. handover:<id>, task:<id>, eta:<id>, pin:<name>, shift:current
+  kind text not null,           -- handover | task | eta | pin | shift
   value jsonb,                  -- the record itself; {"deleted":true} is a tombstone
   updated_at timestamptz not null default now()
 );

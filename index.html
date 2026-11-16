@@ -44,8 +44,9 @@ table.r{border-collapse:collapse;width:100%;font-size:.8rem;margin-top:10px}
 table.r th,table.r td{border:1px solid #3a424b;padding:5px;text-align:center}
 table.r .D{background:#5a4a12}table.r .N{background:#1f3560}table.r .O{background:#1f242a;color:#777}
 table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
-#scanbox{position:fixed;inset:0;background:#000d;z-index:20;display:none;align-items:center;justify-content:center;padding:12px}
+#scanbox,#etabox{position:fixed;inset:0;background:#000d;z-index:20;display:none;align-items:center;justify-content:center;padding:12px}
 #scanbox .card{width:100%;max-width:420px}
+#etabox .card{width:100%;max-width:520px;max-height:90vh;overflow-y:auto}
 #scanmsg{min-height:2.4em;margin:8px 0;color:#6bd68a}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 </style>
@@ -64,6 +65,20 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
   <div class="row"><input id="manual" placeholder="Or type barcode / part no."><button type="button" id="manualadd" style="flex:0 0 auto">Add</button></div>
   <div class="actions"><button type="button" class="sec" id="scandone">Done</button></div>
 </div></div>
+<div id="etabox"><div class="card">
+  <h2>📦 Parts on order – ETA</h2>
+  <form id="eform">
+    <div class="row">
+      <div><label>Asset number</label><input id="easset" placeholder="e.g. LD123"></div>
+      <div><label>WO number</label><input id="ewo" placeholder="e.g. WO45678"></div>
+    </div>
+    <label>Part number</label><input id="epart" placeholder="Part number" required>
+    <label>Description</label><input id="edesc" placeholder="Part description">
+    <label>ETA</label><input type="date" id="eeta" required>
+    <div class="actions"><button type="submit">Add</button><button type="button" class="sec" id="etaclose">Close</button></div>
+  </form>
+  <div id="etalist"></div>
+</div></div>
 <div id="lock"><form class="card" id="lockform">
   <h2>Sign on to shift</h2>
   <div id="lockinfo" style="margin-bottom:8px"></div>
@@ -80,6 +95,7 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 <div class="card">
   <h2>📋 Day planner – to do &amp; to order</h2>
   <div class="actions" style="margin:0 0 10px"><button type="button" id="tscan">📷 Scan part to order</button>
+  <button type="button" class="sec" id="etaopen">📦 Parts ETA</button>
   <a href="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/" target="_blank" rel="noopener"><button type="button" class="sec">🔩 Open Parts Tracker</button></a></div>
   <form id="tform" class="row" style="align-items:stretch">
     <select id="ttype" style="flex:0 0 120px"><option value="task">Task</option><option value="order">Order part</option></select>
@@ -206,7 +222,7 @@ function render(){
   const p=data.filter(h=>h.to===me&&!h.ack);
   $("pending").innerHTML=p.length?`<div class="card"><h2>⚠ Handovers waiting for ${me} (${p.length})</h2>${p.map(entry).join("")}</div>`:"";
   $("history").innerHTML=data.length?data.map(entry).join(""):"<p>No handovers yet.</p>";
-  renderTasks();renderRoster();
+  renderTasks();renderRoster();renderEtas();
   $("onshift").textContent=ss.cur?"👤 "+ss.cur.user+" since "+new Date(ss.cur.at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"";
   $("signoff").style.display=ss.cur?"":"none";
   $("banner").innerHTML=ss.cur&&ss.cur.shiftKey!==here()?`<div class="card"><h2 style="color:#fff">⏰ Shift change – ${ss.cur.user} is still signed on from ${ss.cur.shiftKey}</h2><p>Finish the handover, then the incoming person signs on.</p><button id="bsign">Sign on for ${here()}</button></div>`:"";
@@ -334,6 +350,33 @@ $("tscan").onclick=async()=>{
 $("manualadd").onclick=()=>{addOrder($("manual").value);$("manual").value=""};
 $("scandone").onclick=()=>{$("scanbox").style.display="none";
   if(scanner)scanner.stop().then(()=>scanner.clear()).catch(()=>{});scanner=null};
+// ---- parts on order ETA tracker ----
+const EKEY="eta.v1";
+let etas=JSON.parse(localStorage.getItem(EKEY)||"[]");
+const esave=()=>localStorage.setItem(EKEY,JSON.stringify(etas));
+function pushE(x){qpush("eta:"+x.id,"eta",x)}
+function renderEtas(){
+  $("etaopen").textContent="📦 Parts ETA"+(etas.length?" ("+etas.length+")":"");
+  if($("etabox").style.display!=="flex")return;
+  const today=fmtD(new Date());
+  $("etalist").innerHTML=[...etas].sort((a,b)=>a.eta<b.eta?-1:a.eta>b.eta?1:a.id-b.id).map(x=>{
+    const late=x.eta<today,due=x.eta===today;
+    const eta=parseD(x.eta).toLocaleDateString([],{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+    return `<div class="entry"><b>${esc(x.part)}</b>${x.desc?" — "+esc(x.desc):""}<br>
+    <small>${x.asset?"Asset "+esc(x.asset):""}${x.asset&&x.wo?" • ":""}${x.wo?"WO "+esc(x.wo):""}${x.asset||x.wo?" • ":""}added by ${esc(x.by)} – ${x.shiftKey}</small><br>
+    <b class="${late?"flag":due?"ack":""}">ETA ${eta}${late?" – OVERDUE":due?" – due today":""}</b>
+    <div class="actions"><button class="sec" data-edel="${x.id}">Delete</button></div></div>`}).join("")
+    ||"<p>No parts on order.</p>"}
+$("etaopen").onclick=()=>{$("etabox").style.display="flex";renderEtas();$("easset").focus()};
+$("etaclose").onclick=()=>$("etabox").style.display="none";
+$("eform").onsubmit=e=>{e.preventDefault();
+  const x={id:Date.now(),asset:$("easset").value.trim(),part:$("epart").value.trim(),
+    desc:$("edesc").value.trim(),wo:$("ewo").value.trim(),eta:$("eeta").value,
+    by:$("from").value,shiftKey:here()};
+  etas.push(x);esave();pushE(x);$("eform").reset();renderEtas()};
+document.addEventListener("click",e=>{const id=e.target.dataset.edel;if(!id)return;
+  if(!confirm("Remove this part (arrived / no longer needed)?"))return;
+  etas=etas.filter(x=>x.id!=id);esave();pushDel("eta:"+id,"eta");renderEtas()});
 // ---- sign on / off ----
 const SKEY="shift.v1", PKEY="pins.v1";
 let ss=JSON.parse(localStorage.getItem(SKEY)||'{"cur":null,"log":[]}');
@@ -408,6 +451,9 @@ function applyRow(r){
     tasks=tasks.filter(t=>t.id!==id);
     if(!v.deleted){tasks.push(v);tasks.sort((a,b)=>a.id-b.id)}
     else if(!rseen.includes(id)){rseen.push(id);localStorage.setItem(RSEEN,JSON.stringify(rseen))}}
+  else if(r.kind==="eta"){const id=+r.id.slice(4);
+    etas=etas.filter(x=>x.id!==id);
+    if(!v.deleted)etas.push(v)}
   else if(r.kind==="pin"){const u=r.id.slice(4);if(v.hash)pins[u]=v.hash}
   else if(r.kind==="shift")ss.cur=v.cur||null}
 async function pull(){
@@ -427,10 +473,11 @@ async function pull(){
   if(first){ // seed server with anything this device already had
     data.forEach(h=>{if(!seen.has("handover:"+h.id))pushH(h)});
     tasks.forEach(t=>{if(!seen.has("task:"+t.id))pushT(t)});
+    etas.forEach(x=>{if(!seen.has("eta:"+x.id))pushE(x)});
     Object.keys(pins).forEach(u=>{if(!seen.has("pin:"+u))pushPin(u)});
     if(ss.cur&&!seen.has("shift:current"))pushShift()}
   if(!rows.length){syncUI();return}
-  save();tsave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
+  save();tsave();esave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
   if(JSON.stringify(ss.cur)!==prevCur){ // signed on/off from another device
     if(ss.cur&&$("lock").style.display==="flex"){$("lock").style.display="none";defaults()}
     if(!ss.cur&&$("lock").style.display!=="flex")openLock()}
