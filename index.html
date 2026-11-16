@@ -90,6 +90,11 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
   <button style="width:100%">Sign on</button>
 </form></div>
 <main>
+<div class="card" id="etacard" style="display:none">
+  <h2 style="display:flex;align-items:center;justify-content:space-between">📦 Special orders – awaiting delivery
+    <button type="button" class="sec" id="etamanage" style="padding:5px 10px;font-size:.8rem">Update / tick off</button></h2>
+  <div id="etasummary" style="overflow-x:auto"></div>
+</div>
 <div id="banner"></div>
 <div id="pending"></div>
 
@@ -106,12 +111,6 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
     <button style="flex:0 0 auto">Add</button>
   </form>
   <div id="tasks"></div>
-</div>
-
-<div class="card" id="etacard" style="display:none">
-  <h2 style="display:flex;align-items:center;justify-content:space-between">📦 Special orders – awaiting delivery
-    <button type="button" class="sec" id="etamanage" style="padding:5px 10px;font-size:.8rem">Update / tick off</button></h2>
-  <div id="etasummary" style="overflow-x:auto"></div>
 </div>
 
 <form id="form" class="card">
