@@ -197,6 +197,7 @@ $("form").onsubmit=e=>{
     shift:$("shift").value,date:$("date").value,inprog:$("inprog").value,done:$("done").value,
     parts:$("parts").value,equip:$("equip").value,safety:$("safety").value,notes:$("notes").value,
     open:tasks.filter(t=>!t.done).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")),
+    completedTasks:tasks.filter(t=>t.done&&t.doneShift===here()).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")+(t.doneBy?" (done by "+t.doneBy+")":"")),
     specialOrders:etas.filter(x=>!x.delivered).map(x=>{
       const ref=[x.asset&&"Asset "+x.asset,x.wo&&"WO "+x.wo].filter(Boolean).join(" • ");
       const eta=parseD(x.eta).toLocaleDateString([],{weekday:"short",day:"numeric",month:"short",year:"numeric"});
@@ -209,7 +210,11 @@ $("form").onsubmit=e=>{
 const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 function body(h){
   const f=[["Jobs in progress","inprog"],["Completed","done"],["Parts / stock","parts"],["Equipment","equip"],["Safety","safety"],["Notes","notes"]];
-  return f.filter(([,k])=>h[k].trim()).map(([t,k])=>`<b class="${k==="safety"?"flag":""}">${t}</b><pre>${esc(h[k])}</pre>`).join("")
+  return f.map(([t,k])=>{
+    let v=h[k].trim();
+    if(k==="done"&&h.completedTasks&&h.completedTasks.length)
+      v=(v?v+"\n":"")+h.completedTasks.map(x=>"✔ "+x).join("\n");
+    return v?`<b class="${k==="safety"?"flag":""}">${t}</b><pre>${esc(v)}</pre>`:""}).join("")
     +(h.open&&h.open.length?`<b>Rolled over (not done)</b><pre>${esc(h.open.map(x=>"• "+x).join("\n"))}</pre>`:"")
     +(h.specialOrders&&h.specialOrders.length?`<b>📦 Special order parts not yet delivered</b><pre>${esc(h.specialOrders.map(x=>"• "+x).join("\n"))}</pre>`:"")
     +`<small>Checklist ${h.checks}</small>`;
@@ -259,14 +264,13 @@ function spawnRecurring(){
   if(added){tasks.sort((a,b)=>a.id-b.id);tsave();localStorage.setItem(RSEEN,JSON.stringify(rseen))}}
 function renderTasks(){
   const cur=here();
-  const open=tasks.filter(t=>!t.done), done=tasks.filter(t=>t.done&&t.doneShift===cur);
+  const open=tasks.filter(t=>!t.done); // ticked-off tasks are hidden here and captured in the handover's Completed section
   const row=t=>{const roll=!t.done&&t.shiftKey!==cur;
     return `<div class="task ${t.done?"done":""}"><input type="checkbox" data-tick="${t.id}" ${t.done?"checked":""}>
     <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${t.recur?'<span class="tag recur">🔁 WEEKLY</span>':""}${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}${t.qty>1?" ×"+t.qty:""}</span>
     <small class="m">Added by ${t.by} – ${t.shiftKey}${t.done?` • done by ${t.doneBy}`:""}</small></div>
     <button class="sec" data-tdel="${t.id}">✕</button></div>`};
-  $("tasks").innerHTML=(open.length?open.map(row).join(""):"<p>Nothing outstanding 🎉</p>")
-    +(done.length?`<small>Done this shift</small>`+done.map(row).join(""):"");
+  $("tasks").innerHTML=open.length?open.map(row).join(""):"<p>Nothing outstanding 🎉</p>";
 }
 $("tform").onsubmit=e=>{e.preventDefault();
   const t={id:Date.now(),text:$("ttext").value.trim(),type:$("ttype").value,by:$("from").value,shiftKey:here(),done:false};
@@ -280,7 +284,10 @@ document.addEventListener("click",e=>{
   if(t.del&&confirm("Delete this handover?")){data=data.filter(x=>x.id!=t.del);save();pushDel("handover:"+t.del,"handover");render()}
   if(t.copy){const h=data.find(x=>x.id==t.copy);
     const txt=`${h.shift} shift ${h.date}: ${h.from} -> ${h.to}\n`+[["In progress","inprog"],["Completed","done"],["Parts","parts"],["Equipment","equip"],["Safety","safety"],["Notes","notes"]]
-      .filter(([,k])=>h[k].trim()).map(([a,k])=>`${a}: ${h[k]}`).join("\n")
+      .map(([a,k])=>{let v=h[k].trim();
+        if(k==="done"&&h.completedTasks&&h.completedTasks.length)
+          v=(v?v+"\n":"")+h.completedTasks.map(x=>"- "+x).join("\n");
+        return v?`${a}: ${v}`:""}).filter(Boolean).join("\n")
       +(h.specialOrders&&h.specialOrders.length?"\nSpecial order parts not delivered:\n"+h.specialOrders.map(x=>"- "+x).join("\n"):"");
     navigator.clipboard.writeText(txt).then(()=>alert("Copied"))}
 });
