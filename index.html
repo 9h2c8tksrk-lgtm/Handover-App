@@ -33,7 +33,7 @@ button.sec{background:#3a424b;color:#eee}
 .task.done span{text-decoration:line-through;color:#888}
 .task .m{font-size:.75rem;color:#aaa;display:block}
 .tag{font-size:.7rem;padding:2px 6px;border-radius:4px;background:#5b8def;color:#111;margin-right:6px}
-.tag.order{background:#e8a317}.tag.roll{background:#ff6b6b}.tag.recur{background:#b48ef0}
+.tag.order{background:#e8a317}.tag.roll{background:#ff6b6b}.tag.recur{background:#b48ef0}.tag.assign{background:#6bd68a}
 .task button{padding:4px 8px;font-size:.8rem;margin-left:auto}
 #lock{position:fixed;inset:0;background:#1b1f24;z-index:10;display:none;align-items:center;justify-content:center;padding:16px}
 #lock .card{width:100%;max-width:380px}
@@ -52,7 +52,7 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 </style>
 </head>
 <body>
-<header><h1>🔧 Shift Handover</h1><div id="who"><span id="sync" style="font-size:.8rem"></span><span id="now"></span><span id="onshift"></span><button id="signoff" class="sec">Sign off</button></div></header>
+<header><h1>🔧 Shift Handover</h1><div id="who"><span id="sync" style="font-size:.8rem"></span><span id="now"></span><span id="onshift"></span><button id="supview" class="sec" style="display:none">👁 Handovers view</button><button id="signoff" class="sec">Sign off</button></div></header>
 <div id="scanbox"><div class="card">
   <h2>Scan parts to order</h2>
   <div id="reader"></div>
@@ -93,14 +93,16 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 <div id="banner"></div>
 <div id="pending"></div>
 
-<div class="card">
+<div class="card" id="plannercard">
   <h2>📋 Day planner – to do &amp; to order</h2>
   <div class="actions" style="margin:0 0 10px"><button type="button" id="tscan">📷 Scan part to order</button>
   <button type="button" class="sec" id="etaopen">📦 Special order ETA</button>
   <a href="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/" target="_blank" rel="noopener"><button type="button" class="sec">🔩 Open Parts Tracker</button></a></div>
-  <form id="tform" class="row" style="align-items:stretch">
+  <form id="tform" class="row" style="align-items:stretch;flex-wrap:wrap">
     <select id="ttype" style="flex:0 0 120px"><option value="task">Task</option><option value="order">Order part</option></select>
     <input id="ttext" placeholder="Add item…" required style="flex:3">
+    <select id="tassign" class="supx" style="flex:0 0 110px;display:none"><option value="">Anyone</option></select>
+    <select id="tshift" class="supx" style="flex:0 0 100px;display:none"><option value="">Any shift</option><option>Day</option><option>Night</option></select>
     <button style="flex:0 0 auto">Add</button>
   </form>
   <div id="tasks"></div>
@@ -147,6 +149,9 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 const CREW=["Carl","Declan","Lockie"], KEY="handovers.v1", ME="handover.me";
 // Everyone who can sign on / hand over. CREW are on the 21-day roster cycle; the rest aren't rostered.
 const USERS=[...CREW,"Hayden","Stuart"];
+const SUPS=["Hayden","Stuart"]; // can assign tasks and use the handovers-only view
+const isSup=()=>SUPS.includes($("from").value);
+let supMode=false;
 const $=id=>document.getElementById(id);
 const TKEY="planner.v1";
 let tasks=JSON.parse(localStorage.getItem(TKEY)||"[]");
@@ -159,7 +164,7 @@ function currentShift(d=new Date()){const h=d.getHours();return h>=5&&h<17?"Day"
 function shiftDate(d=new Date()){const x=new Date(d);if(d.getHours()<5)x.setDate(x.getDate()-1);
   return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")}
 
-USERS.forEach(n=>{$("from").add(new Option(n,n));$("to").add(new Option(n,n))});
+USERS.forEach(n=>{$("from").add(new Option(n,n));$("to").add(new Option(n,n));$("tassign").add(new Option(n,n))});
 function defaults(){
   if(ss.cur)$("from").value=ss.cur.user;
   $("shift").value=currentShift();$("date").value=shiftDate();setTo();
@@ -197,7 +202,8 @@ $("form").onsubmit=e=>{
   const h={id:Date.now(),created:new Date().toISOString(),from:$("from").value,to:$("to").value,
     shift:$("shift").value,date:$("date").value,inprog:$("inprog").value,done:$("done").value,
     parts:$("parts").value,equip:$("equip").value,safety:$("safety").value,notes:$("notes").value,
-    open:tasks.filter(t=>!t.done).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")),
+    open:tasks.filter(t=>!t.done).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")
+      +(t.assignTo||t.assignShift?" [for "+(t.assignTo||"anyone")+(t.assignShift?" – "+t.assignShift:"")+"]":"")),
     completedTasks:tasks.filter(t=>t.done&&t.doneShift===here()).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")+(t.doneBy?" (done by "+t.doneBy+")":"")),
     specialOrders:etas.filter(x=>!x.delivered).map(x=>{
       const ref=[x.asset&&"Asset "+x.asset,x.wo&&"WO "+x.wo].filter(Boolean).join(" • ");
@@ -230,7 +236,15 @@ function entry(h){
 }
 function render(){
   spawnRecurring();
-  const me=$("from").value;
+  const me=$("from").value, sup=isSup();
+  if(!sup)supMode=false;
+  // supervisor controls + handovers-only view
+  $("supview").style.display=sup?"":"none";
+  $("supview").textContent=supMode?"← Normal view":"👁 Handovers view";
+  document.querySelectorAll(".supx").forEach(el=>el.style.display=sup?"":"none");
+  $("plannercard").style.display=supMode?"none":"";
+  $("form").style.display=supMode?"none":"";
+  $("rosterbox").style.display=supMode?"none":"";
   const p=data.filter(h=>h.to===me&&!h.ack);
   $("pending").innerHTML=p.length?`<div class="card"><h2>⚠ Handovers waiting for ${me} (${p.length})</h2>${p.map(entry).join("")}</div>`:"";
   $("history").innerHTML=data.length?data.map(entry).join(""):"<p>No handovers yet.</p>";
@@ -241,6 +255,7 @@ function render(){
   $("now").textContent=currentShift()+" shift • "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
 }
 const here=()=>currentShift()+" "+shiftDate();
+$("supview").onclick=()=>{supMode=!supMode;render();window.scrollTo(0,0)};
 // ---- recurring weekly tasks (dow: 0=Sun..6=Sat) ----
 const RECUR=[
   {dow:1,shift:"Day",text:"Check with Stores Port Hedland that cages will be returned to suppliers"},
@@ -268,7 +283,7 @@ function renderTasks(){
   const open=tasks.filter(t=>!t.done); // ticked-off tasks are hidden here and captured in the handover's Completed section
   const row=t=>{const roll=!t.done&&t.shiftKey!==cur;
     return `<div class="task ${t.done?"done":""}"><input type="checkbox" data-tick="${t.id}" ${t.done?"checked":""}>
-    <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${t.recur?'<span class="tag recur">🔁 WEEKLY</span>':""}${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}${t.qty>1?" ×"+t.qty:""}</span>
+    <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${t.recur?'<span class="tag recur">🔁 WEEKLY</span>':""}${t.assignTo||t.assignShift?`<span class="tag assign">👤 ${esc(t.assignTo||"Anyone")}${t.assignShift?" • "+t.assignShift:""}</span>`:""}${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}${t.qty>1?" ×"+t.qty:""}</span>
     <small class="m">Added by ${t.by} – ${t.shiftKey}${t.done?` • done by ${t.doneBy}`:""}</small></div>
     <button class="sec" data-tdel="${t.id}">✕</button></div>`};
   const ord=open.filter(t=>t.type==="order"), tsk=open.filter(t=>t.type!=="order");
@@ -279,8 +294,12 @@ function renderTasks(){
 }
 $("tform").onsubmit=e=>{e.preventDefault();
   const t={id:Date.now(),text:$("ttext").value.trim(),type:$("ttype").value,by:$("from").value,shiftKey:here(),done:false};
+  if(isSup()){
+    if($("tassign").value)t.assignTo=$("tassign").value;
+    if($("tshift").value)t.assignShift=$("tshift").value;
+  }
   tasks.push(t);
-  tsave();pushT(t);$("ttext").value="";render()};
+  tsave();pushT(t);$("ttext").value="";$("tassign").value="";$("tshift").value="";render()};
 document.addEventListener("click",e=>{
   if(e.target.dataset.tdel){const id=e.target.dataset.tdel;
     tasks=tasks.filter(x=>x.id!=id);tsave();pushDel("task:"+id,"task");render();return}
