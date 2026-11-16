@@ -498,6 +498,49 @@ function lxConnect(){
     if(!lxWs)return;
     lxWs=null;lxOk=false;lxSrv++;renderLx();setTimeout(lxConnect,30000)};
 }
+// ---- red alert alarm (siren + voice) ----
+let lxCtx=null,lxAlertOn=false;
+function lxAudio(){
+  if(!lxCtx){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;lxCtx=new AC()}
+  if(lxCtx.state==="suspended")lxCtx.resume();
+  return lxCtx}
+function lxSiren(dur=4){ // rising/falling siren sweep
+  const ctx=lxAudio();if(!ctx)return;
+  try{const t=ctx.currentTime,o=ctx.createOscillator(),g=ctx.createGain();
+    o.type="sawtooth";o.connect(g);g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.5,t);
+    for(let i=0;i<dur;i++){
+      o.frequency.setValueAtTime(600,t+i);
+      o.frequency.linearRampToValueAtTime(1200,t+i+0.5);
+      o.frequency.linearRampToValueAtTime(600,t+i+1)}
+    g.gain.setValueAtTime(0.5,t+dur);g.gain.linearRampToValueAtTime(0,t+dur+0.2);
+    o.start(t);o.stop(t+dur+0.2)}catch{}}
+function lxSpeak(){
+  if(!window.speechSynthesis)return;
+  try{speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance("Red Alert Active");
+    u.rate=0.9;u.pitch=0.8;u.volume=1;
+    speechSynthesis.speak(u)}catch{}}
+let lxKeep=null;
+function lxKeepAlive(){ // inaudible tone keeps the audio context running when the tab is backgrounded
+  const ctx=lxAudio();if(!ctx||lxKeep)return;
+  try{const o=ctx.createOscillator(),g=ctx.createGain();
+    o.frequency.value=30;g.gain.value=0.0001;
+    o.connect(g);g.connect(ctx.destination);o.start();lxKeep=o}catch{}}
+function lxNotify(){ // OS-level popup so the alert is seen from another app/browser
+  if(!("Notification" in window)||Notification.permission!=="granted")return;
+  try{new Notification("⛔ RED ALERT – Lightning",{
+    body:`Lightning within ${LX.danger} km of Golden Eagle site`,
+    tag:"lx-red",requireInteraction:true})}catch{}}
+function lxRedAlert(){lxSiren(4);setTimeout(lxSpeak,4300);lxNotify()}
+// browsers block audio until first user interaction – unlock audio + ask for
+// notification permission on first tap so alerts work while tab is in background
+document.addEventListener("pointerdown",()=>{
+  lxKeepAlive();
+  if("Notification" in window&&Notification.permission==="default")
+    Notification.requestPermission().catch(()=>{})},{once:true});
+// re-sound the alarm every 2 min while the danger state persists
+setInterval(()=>{if(lxAlertOn)lxRedAlert()},120000);
 async function lxForecast(){
   if(!navigator.onLine)return;
   try{const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LX.lat}&longitude=${LX.lon}&hourly=weather_code&forecast_hours=12&timezone=auto`);
@@ -510,6 +553,8 @@ function renderLx(){
   const now=Date.now();
   lxStrikes=lxStrikes.filter(s=>now-s.t<30*60000);
   const danger=lxStrikes.filter(s=>s.d<=LX.danger);
+  if(danger.length&&!lxAlertOn){lxAlertOn=true;lxRedAlert()}
+  else if(!danger.length&&lxAlertOn){lxAlertOn=false;try{speechSynthesis.cancel()}catch{}}
   const hit=danger.length?danger:lxStrikes;
   const card=$("lxcard");let cls="",html="";
   if(hit.length){
