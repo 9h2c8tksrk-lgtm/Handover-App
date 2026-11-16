@@ -216,8 +216,12 @@ const here=()=>currentShift()+" "+shiftDate();
 // ---- recurring weekly tasks (dow: 0=Sun..6=Sat) ----
 const RECUR=[
   {dow:1,shift:"Day",text:"Check with Stores Port Hedland that cages will be returned to suppliers"},
-  {dow:3,shift:"Day",text:"Stock count – McPhee ROM"},
+  {dow:3,shift:"Night",text:"Stock count – McPhee ROM"},
   {dow:3,shift:"Day",text:"Follow up open purchase orders with suppliers"},
+  {dow:4,shift:"Day",text:"Check if waste oil IBCs have been organised"},
+  {dow:2,shift:"Day",text:"Tyre orders – check if placed"},
+  {dow:2,shift:"Night",text:"Check oils and lubricants"},
+  {dow:4,shift:"Night",text:"Check sundries and re-order"},
 ];
 const RSEEN="recur.seen.v1";
 let rseen=JSON.parse(localStorage.getItem(RSEEN)||"[]").filter(id=>Date.now()-id<30*864e5);
