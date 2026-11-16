@@ -197,6 +197,10 @@ $("form").onsubmit=e=>{
     shift:$("shift").value,date:$("date").value,inprog:$("inprog").value,done:$("done").value,
     parts:$("parts").value,equip:$("equip").value,safety:$("safety").value,notes:$("notes").value,
     open:tasks.filter(t=>!t.done).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")),
+    specialOrders:etas.filter(x=>!x.delivered).map(x=>{
+      const ref=[x.asset&&"Asset "+x.asset,x.wo&&"WO "+x.wo].filter(Boolean).join(" • ");
+      const eta=parseD(x.eta).toLocaleDateString([],{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+      return x.part+(x.desc?" — "+x.desc:"")+(ref?" ("+ref+")":"")+" – ETA "+eta+(x.eta<fmtD(new Date())?" OVERDUE":"")}),
     checks:chk.filter(c=>c.checked).length+"/"+chk.length,ack:null};
   data.unshift(h);
   save();pushH(h);$("form").reset();render();window.scrollTo(0,0);
@@ -207,6 +211,7 @@ function body(h){
   const f=[["Jobs in progress","inprog"],["Completed","done"],["Parts / stock","parts"],["Equipment","equip"],["Safety","safety"],["Notes","notes"]];
   return f.filter(([,k])=>h[k].trim()).map(([t,k])=>`<b class="${k==="safety"?"flag":""}">${t}</b><pre>${esc(h[k])}</pre>`).join("")
     +(h.open&&h.open.length?`<b>Rolled over (not done)</b><pre>${esc(h.open.map(x=>"• "+x).join("\n"))}</pre>`:"")
+    +(h.specialOrders&&h.specialOrders.length?`<b>📦 Special order parts not yet delivered</b><pre>${esc(h.specialOrders.map(x=>"• "+x).join("\n"))}</pre>`:"")
     +`<small>Checklist ${h.checks}</small>`;
 }
 function entry(h){
@@ -275,7 +280,8 @@ document.addEventListener("click",e=>{
   if(t.del&&confirm("Delete this handover?")){data=data.filter(x=>x.id!=t.del);save();pushDel("handover:"+t.del,"handover");render()}
   if(t.copy){const h=data.find(x=>x.id==t.copy);
     const txt=`${h.shift} shift ${h.date}: ${h.from} -> ${h.to}\n`+[["In progress","inprog"],["Completed","done"],["Parts","parts"],["Equipment","equip"],["Safety","safety"],["Notes","notes"]]
-      .filter(([,k])=>h[k].trim()).map(([a,k])=>`${a}: ${h[k]}`).join("\n");
+      .filter(([,k])=>h[k].trim()).map(([a,k])=>`${a}: ${h[k]}`).join("\n")
+      +(h.specialOrders&&h.specialOrders.length?"\nSpecial order parts not delivered:\n"+h.specialOrders.map(x=>"- "+x).join("\n"):"");
     navigator.clipboard.writeText(txt).then(()=>alert("Copied"))}
 });
 document.addEventListener("change",e=>{const id=e.target.dataset.tick;if(!id)return;
