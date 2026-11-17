@@ -31,10 +31,15 @@ button.sec{background:#3a424b;color:#eee}
 .task{display:flex;align-items:center;gap:10px;padding:8px;margin:6px 0;background:#1f242a;border-radius:6px}
 .task input{width:22px;height:22px;flex:none}
 .task.done span{text-decoration:line-through;color:#888}
+.task.done .tag{text-decoration:none;opacity:.75}
 .task .m{font-size:.75rem;color:#aaa;display:block}
 .tag{font-size:.7rem;padding:2px 6px;border-radius:4px;background:#5b8def;color:#111;margin-right:6px}
-.tag.order{background:#e8a317}.tag.roll{background:#ff6b6b}.tag.recur{background:#b48ef0}.tag.assign{background:#6bd68a}
+.tag.order{background:#e8a317}.tag.roll{background:#ff6b6b}.tag.recur{background:#b48ef0}.tag.assign{background:#6bd68a}.tag.work{background:#4ec3d9}
 .task button{padding:4px 8px;font-size:.8rem;margin-left:auto}
+.task button+button{margin-left:6px}
+.tabs{display:flex;gap:6px;margin:0 0 10px}
+.tabs button{flex:1;background:#3a424b;color:#eee;padding:8px;font-size:.9rem}
+.tabs button.active{background:#e8a317;color:#111}
 #lock{position:fixed;inset:0;background:#1b1f24;z-index:10;display:none;align-items:center;justify-content:center;padding:16px}
 #lock .card{width:100%;max-width:380px}
 #lock .err{color:#ff6b6b;min-height:1.2em;margin:8px 0}
@@ -113,7 +118,8 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 
 <div class="card" id="plannercard">
   <h2>📋 Day planner – to do &amp; to order</h2>
-  <div class="actions" style="margin:0 0 10px"><button type="button" id="tscan">📷 Scan part to order</button>
+  <div class="tabs"><button type="button" class="active" data-ttab="open" id="tabopen">📋 To do</button><button type="button" data-ttab="done" id="tabdone">✅ Completed</button></div>
+  <div class="actions" id="tactions" style="margin:0 0 10px"><button type="button" id="tscan">📷 Scan part to order</button>
   <button type="button" class="sec" id="etaopen">📦 Special order ETA</button>
   <a href="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/" target="_blank" rel="noopener"><button type="button" class="sec">🔩 Open Parts Tracker</button></a></div>
   <form id="tform" class="row" style="align-items:stretch;flex-wrap:wrap">
@@ -221,7 +227,8 @@ $("form").onsubmit=e=>{
     shift:$("shift").value,date:$("date").value,inprog:$("inprog").value,done:$("done").value,
     parts:$("parts").value,equip:$("equip").value,safety:$("safety").value,notes:$("notes").value,
     open:tasks.filter(t=>!t.done).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")
-      +(t.assignTo||t.assignShift?" [for "+(t.assignTo||"anyone")+(t.assignShift?" – "+t.assignShift:"")+"]":"")),
+      +(t.assignTo||t.assignShift?" [for "+(t.assignTo||"anyone")+(t.assignShift?" – "+t.assignShift:"")+"]":"")
+      +(t.workingBy?" [in progress – "+t.workingBy+"]":"")),
     completedTasks:tasks.filter(t=>t.done&&t.doneShift===here()).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")+(t.doneBy?" (done by "+t.doneBy+")":"")),
     specialOrders:etas.filter(x=>!x.delivered).map(x=>{
       const ref=[x.asset&&"Asset "+x.asset,x.wo&&"WO "+x.wo].filter(Boolean).join(" • ");
@@ -298,14 +305,26 @@ function spawnRecurring(){
     const t={id,type:"task",recur:true,text:r.text,by:"Recurring",shiftKey:here(),done:false};
     tasks.push(t);pushT(t);rseen.push(id);added=true});
   if(added){tasks.sort((a,b)=>a.id-b.id);tsave();localStorage.setItem(RSEEN,JSON.stringify(rseen))}}
+let ttab="open";
 function renderTasks(){
   const cur=here();
-  const open=tasks.filter(t=>!t.done); // ticked-off tasks are hidden here and captured in the handover's Completed section
+  const open=tasks.filter(t=>!t.done), done=tasks.filter(t=>t.done).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
+  $("tabopen").textContent=`📋 To do (${open.length})`;
+  $("tabdone").textContent=`✅ Completed (${done.length})`;
+  document.querySelectorAll("[data-ttab]").forEach(b=>b.classList.toggle("active",b.dataset.ttab===ttab));
+  $("tactions").style.display=ttab==="open"?"":"none";
+  $("tform").style.display=ttab==="open"?"":"none";
   const row=t=>{const roll=!t.done&&t.shiftKey!==cur;
     return `<div class="task ${t.done?"done":""}"><input type="checkbox" data-tick="${t.id}" ${t.done?"checked":""}>
-    <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${t.recur?'<span class="tag recur">🔁 WEEKLY</span>':""}${t.assignTo||t.assignShift?`<span class="tag assign">👤 ${esc(t.assignTo||"Anyone")}${t.assignShift?" • "+t.assignShift:""}</span>`:""}${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}${t.qty>1?" ×"+t.qty:""}</span>
-    <small class="m">Added by ${t.by} – ${t.shiftKey}${t.done?` • done by ${t.doneBy}`:""}</small></div>
+    <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${t.recur?'<span class="tag recur">🔁 WEEKLY</span>':""}${t.assignTo||t.assignShift?`<span class="tag assign">👤 ${esc(t.assignTo||"Anyone")}${t.assignShift?" • "+t.assignShift:""}</span>`:""}${!t.done&&t.workingBy?`<span class="tag work">🔧 ${esc(t.workingBy)} on it</span>`:""}${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}${t.qty>1?" ×"+t.qty:""}</span>
+    <small class="m">Added by ${t.by} – ${t.shiftKey}${t.done?` • done by ${t.doneBy}${t.doneShift?" – "+t.doneShift:""}`:""}</small></div>
+    ${t.done?"":`<button type="button" class="sec" data-twork="${t.id}">${t.workingBy?"✋ Stop":"🔧 I'm on it"}</button>`}
     <button class="sec" data-tdel="${t.id}">✕</button></div>`};
+  if(ttab==="done"){
+    $("tasks").innerHTML=done.length?
+      `<small>✅ Ticked off – untick anything done by mistake to send it back to the to-do list. Kept for 30 days.</small>`+done.map(row).join("")
+      :"<p>Nothing ticked off yet.</p>";
+    return}
   const ord=open.filter(t=>t.type==="order"), tsk=open.filter(t=>t.type!=="order");
   $("tasks").innerHTML=open.length?
     (tsk.length?`<small>📋 Tasks</small>`+tsk.map(row).join(""):"")+
@@ -321,6 +340,12 @@ $("tform").onsubmit=e=>{e.preventDefault();
   tasks.push(t);
   tsave();pushT(t);$("ttext").value="";$("tassign").value="";$("tshift").value="";render()};
 document.addEventListener("click",e=>{
+  if(e.target.dataset.ttab){ttab=e.target.dataset.ttab;renderTasks();return}
+  if(e.target.dataset.twork){const t=tasks.find(x=>x.id==e.target.dataset.twork);if(!t)return;
+    const me=$("from").value;
+    if(t.workingBy===me)t.workingBy=null;
+    else{if(t.workingBy&&!confirm(t.workingBy+" is already on this – take over?"))return;t.workingBy=me}
+    tsave();pushT(t);render();return}
   if(e.target.dataset.tdel){const id=e.target.dataset.tdel;
     tasks=tasks.filter(x=>x.id!=id);tsave();pushDel("task:"+id,"task");render();return}
   const t=e.target.dataset;
@@ -338,8 +363,10 @@ document.addEventListener("click",e=>{
 document.addEventListener("change",e=>{const id=e.target.dataset.tick;if(!id)return;
   const t=tasks.find(x=>x.id==id);t.done=e.target.checked;
   t.doneBy=t.done?$("from").value:null;t.doneShift=t.done?here():null;
-  const old=tasks.filter(x=>x.done&&Date.now()-x.id>=30*864e5);
-  tasks=tasks.filter(x=>!x.done||Date.now()-x.id<30*864e5);
+  t.doneAt=t.done?Date.now():null;
+  if(t.done)t.workingBy=null;
+  const old=tasks.filter(x=>x.done&&Date.now()-(x.doneAt||x.id)>=30*864e5);
+  tasks=tasks.filter(x=>!x.done||Date.now()-(x.doneAt||x.id)<30*864e5);
   tsave();pushT(t);old.forEach(x=>pushDel("task:"+x.id,"task"));render()});
 $("export").onclick=()=>{const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));
