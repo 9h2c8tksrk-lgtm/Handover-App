@@ -309,7 +309,9 @@ const RECUR=[
 ];
 const RSEEN="recur.seen.v1";
 let rseen=JSON.parse(localStorage.getItem(RSEEN)||"[]").filter(id=>Date.now()-id<30*864e5);
+let synced=false; // don't spawn until we've seen the server's copies, or a stale device overwrites ticked-off tasks
 function spawnRecurring(){
+  if(sb&&navigator.onLine&&!synced)return;
   const date=shiftDate(),sh=currentShift(),dow=parseD(date).getDay();
   let added=false;
   RECUR.forEach((r,i)=>{
@@ -710,6 +712,7 @@ function applyRow(r){
     if(!v.deleted){data.push(v);data.sort((a,b)=>b.id-a.id)}}
   else if(r.kind==="task"){const id=+r.id.slice(5);
     tasks=tasks.filter(t=>t.id!==id);
+    if(v.recur&&!rseen.includes(id)){rseen.push(id);localStorage.setItem(RSEEN,JSON.stringify(rseen))}
     if(!v.deleted){tasks.push(v);tasks.sort((a,b)=>a.id-b.id)}
     else if(!rseen.includes(id)){rseen.push(id);localStorage.setItem(RSEEN,JSON.stringify(rseen))}}
   else if(r.kind==="eta"){const id=+r.id.slice(4);
@@ -725,6 +728,9 @@ async function pull(){
   const {data:rows,error}=await q;
   if(error){pullOk=false;syncUI();return}
   pullOk=true;
+  // a ticked-off recurring task on the server beats a stale unticked copy still queued here
+  rows.forEach(r=>{if(r.kind==="task"&&r.value&&r.value.recur&&r.value.done){
+    const i=out.findIndex(o=>o.id===r.id&&o.value&&!o.value.done);if(i>=0){out.splice(i,1);osave()}}});
   const pend=new Set(out.map(o=>o.id)), seen=new Set(), prevCur=JSON.stringify(ss.on);
   applying=true;
   for(const r of rows){seen.add(r.id);lastSync=r.updated_at;if(!pend.has(r.id))applyRow(r)}
@@ -737,12 +743,12 @@ async function pull(){
     etas.forEach(x=>{if(!seen.has("eta:"+x.id))pushE(x)});
     Object.keys(pins).forEach(u=>{if(!seen.has("pin:"+u))pushPin(u)});
     if(ss.on.length&&!seen.has("shift:current"))pushShift()}
-  if(!rows.length){syncUI();return}
+  if(!rows.length){if(!synced){synced=true;render()}syncUI();return}
   save();tsave();esave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
   if(JSON.stringify(ss.on)!==prevCur){ // signed on/off from another device
     if(!ss.on.length&&$("lock").style.display!=="flex")openLock();
     else if($("lock").style.display==="flex")openLock(lockOff&&ss.on.length?true:false)}
-  render();flush();syncUI()}
+  synced=true;render();flush();syncUI()}
 window.addEventListener("online",()=>{flush();pull()});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
 setInterval(pull,20000);
