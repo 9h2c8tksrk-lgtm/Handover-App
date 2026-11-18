@@ -63,7 +63,7 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 @media (min-width:1300px){
   #etacard{position:fixed;top:70px;left:calc(50% + 396px);right:16px;max-width:360px;max-height:calc(100vh - 90px);overflow-y:auto;z-index:5}
-  #lxcard{position:fixed;top:70px;right:calc(50% + 396px);left:16px;max-width:360px;z-index:5;margin-left:auto}
+  #leftcol{position:fixed;top:70px;right:calc(50% + 396px);left:16px;max-width:360px;max-height:calc(100vh - 90px);overflow-y:auto;z-index:5;margin-left:auto}
 }
 #lxcard.lx-watch{background:#6b5412}
 #lxcard.lx-danger{background:#7a2a2a}
@@ -85,6 +85,11 @@ summary{cursor:pointer}
 .mic{margin-top:6px;padding:6px 12px;font-size:.85rem}
 .mic.on{background:#ff6b6b;color:#111;animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.6}}
+#svccard input{padding:7px;font-size:.9rem}
+#svccard label{margin:6px 0 2px;font-size:.75rem}
+.svc{padding:8px 10px;margin:6px 0;background:#1d2228;border-radius:10px;border-left:4px solid #4ec3d9;font-size:.85rem}
+.svc.late{border-color:#ff6b6b}.svc.done{opacity:.55}
+.svc button{padding:3px 9px;font-size:.75rem}
 </style>
 </head>
 <body>
@@ -129,9 +134,22 @@ summary{cursor:pointer}
   <button type="button" id="lockcancel" class="sec" style="width:100%;margin-top:8px;display:none">Cancel</button>
 </form></div>
 <main>
+<div id="leftcol">
 <div class="card" id="lxcard" style="display:none">
   <h2>⚡ Lightning – Golden Eagle</h2>
   <div id="lxbody" style="font-size:.9rem"></div>
+</div>
+<div class="card" id="svccard">
+  <h2>🛠 Service jobs</h2>
+  <form id="svcform">
+    <label for="svasset">Asset number</label><input id="svasset" placeholder="e.g. LD123" required>
+    <label for="svdesc">Service description</label><input id="svdesc" placeholder="e.g. 500hr service" required>
+    <div class="row"><div><label for="svdate">Date</label><input type="date" id="svdate" required></div>
+    <div><label for="sveta">ETA</label><input type="date" id="sveta" required></div></div>
+    <button style="width:100%;margin-top:8px">Add</button>
+  </form>
+  <div id="svclist"></div>
+</div>
 </div>
 <div class="card" id="etacard" style="display:none">
   <h2 style="display:flex;align-items:center;justify-content:space-between">📦 Special orders – awaiting delivery
@@ -546,6 +564,32 @@ document.addEventListener("change",e=>{
     esave();pushE(x);renderEtas()}
   else if(upd){const x=etas.find(x=>x.id==upd);if(!x||!e.target.value)return;
     x.eta=e.target.value;esave();pushE(x);renderEtas()}});
+
+// ---- service jobs (left-hand window) ----
+const SVKEY="svc.v1";
+let svcs=JSON.parse(localStorage.getItem(SVKEY)||"[]");
+const svsave=()=>localStorage.setItem(SVKEY,JSON.stringify(svcs));
+const pushS=x=>qpush("svc:"+x.id,"svc",x);
+const fmtShort=d=>parseD(d).toLocaleDateString([],{day:"numeric",month:"short"});
+function renderSvc(){
+  const today=fmtD(new Date());
+  $("svclist").innerHTML=[...svcs].sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(a.eta<b.eta?-1:a.eta>b.eta?1:a.id-b.id)).map(x=>{
+    const late=!x.done&&x.eta<today;
+    return `<div class="svc ${late?"late":""} ${x.done?"done":""}"><b>${esc(x.asset)}</b> – ${esc(x.desc)}<br>
+    <small>Date ${fmtShort(x.date)} • <span class="${late?"flag":""}">ETA ${fmtShort(x.eta)}${late?" ⚠ overdue":x.eta===today&&!x.done?" (today)":""}</span> • ${esc(x.by||"")}</small>
+    <div class="actions" style="margin-top:4px;align-items:center"><label class="check" style="margin:0;font-size:.8rem"><input type="checkbox" data-svdone="${x.id}" ${x.done?"checked":""} style="width:18px;height:18px"> Done</label>
+    <button class="sec" data-svdel="${x.id}" style="margin-left:auto">✕</button></div></div>`}).join("")||"<small>No service jobs.</small>"}
+$("svdate").value=fmtD(new Date());
+$("svcform").onsubmit=e=>{e.preventDefault();
+  const x={id:Date.now(),asset:$("svasset").value.trim(),desc:$("svdesc").value.trim(),date:$("svdate").value,eta:$("sveta").value,by:$("from").value};
+  svcs.push(x);svsave();pushS(x);$("svcform").reset();$("svdate").value=fmtD(new Date());renderSvc()};
+document.addEventListener("click",e=>{const id=e.target.dataset.svdel;if(!id)return;
+  if(!confirm("Remove this service job?"))return;
+  svcs=svcs.filter(x=>x.id!=id);svsave();pushDel("svc:"+id,"svc");renderSvc()});
+document.addEventListener("change",e=>{const id=e.target.dataset.svdone;if(!id)return;
+  const x=svcs.find(x=>x.id==id);if(!x)return;
+  x.done=e.target.checked?fmtD(new Date()):null;svsave();pushS(x);renderSvc()});
+renderSvc();
 // ---- lightning warning (Golden Eagle mine site) ----
 // Live strikes: Blitzortung.org community network. Backup: Open-Meteo thunderstorm forecast.
 const LX={lat:-21.9662,lon:120.1201,watch:20,danger:5}; // km rings
@@ -743,6 +787,9 @@ function applyRow(r){
   else if(r.kind==="eta"){const id=+r.id.slice(4);
     etas=etas.filter(x=>x.id!==id);
     if(!v.deleted)etas.push(v)}
+  else if(r.kind==="svc"){const id=+r.id.slice(4);
+    svcs=svcs.filter(x=>x.id!==id);
+    if(!v.deleted)svcs.push(v)}
   else if(r.kind==="pin"){const u=r.id.slice(4);if(v.hash)pins[u]=v.hash}
   else if(r.kind==="shift")ss.on=Array.isArray(v.on)?v.on:v.cur?[v.cur]:[]}
 async function pull(){
@@ -767,14 +814,15 @@ async function pull(){
     data.forEach(h=>{if(!seen.has("handover:"+h.id))pushH(h)});
     tasks.forEach(t=>{if(!seen.has("task:"+t.id))pushT(t)});
     etas.forEach(x=>{if(!seen.has("eta:"+x.id))pushE(x)});
+    svcs.forEach(x=>{if(!seen.has("svc:"+x.id))pushS(x)});
     Object.keys(pins).forEach(u=>{if(!seen.has("pin:"+u))pushPin(u)});
     if(ss.on.length&&!seen.has("shift:current"))pushShift()}
   if(!rows.length){if(!synced){synced=true;render()}syncUI();return}
-  save();tsave();esave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
+  save();tsave();esave();svsave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
   if(JSON.stringify(ss.on)!==prevCur){ // signed on/off from another device
     if(!ss.on.length&&$("lock").style.display!=="flex")openLock();
     else if($("lock").style.display==="flex")openLock(lockOff&&ss.on.length?true:false)}
-  synced=true;render();flush();syncUI();if(!first)notifyNew(oldH,oldT)}
+  synced=true;render();renderSvc();flush();syncUI();if(!first)notifyNew(oldH,oldT)}
 window.addEventListener("online",()=>{flush();pull()});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
 setInterval(pull,20000);

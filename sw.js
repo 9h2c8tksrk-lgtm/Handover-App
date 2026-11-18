@@ -1,4 +1,4 @@
-const CACHE = "handover-v2";
+const CACHE = "handover-v3";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icon.svg"];
 const CDN = ["https://unpkg.com/", "https://cdn.jsdelivr.net/"];
 
