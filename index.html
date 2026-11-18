@@ -146,6 +146,7 @@ summary{cursor:pointer}
     <label for="svdesc">Service description</label><input id="svdesc" placeholder="e.g. 500hr service" required>
     <div class="row"><div><label for="svdate">Date</label><input type="date" id="svdate" required></div>
     <div><label for="sveta">ETA</label><input type="date" id="sveta" required></div></div>
+    <label for="svtime">ETA time</label><input type="time" id="svtime">
     <button style="width:100%;margin-top:8px">Add</button>
   </form>
   <div id="svclist"></div>
@@ -574,14 +575,15 @@ const fmtShort=d=>parseD(d).toLocaleDateString([],{day:"numeric",month:"short"})
 function renderSvc(){
   const today=fmtD(new Date());
   $("svclist").innerHTML=[...svcs].sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(a.eta<b.eta?-1:a.eta>b.eta?1:a.id-b.id)).map(x=>{
-    const late=!x.done&&x.eta<today;
+    const now=new Date(),nowT=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+    const late=!x.done&&(x.eta<today||(x.eta===today&&x.etaTime&&x.etaTime<nowT));
     return `<div class="svc ${late?"late":""} ${x.done?"done":""}"><b>${esc(x.asset)}</b> – ${esc(x.desc)}<br>
-    <small>Date ${fmtShort(x.date)} • <span class="${late?"flag":""}">ETA ${fmtShort(x.eta)}${late?" ⚠ overdue":x.eta===today&&!x.done?" (today)":""}</span> • ${esc(x.by||"")}</small>
+    <small>Date ${fmtShort(x.date)} • <span class="${late?"flag":""}">ETA ${fmtShort(x.eta)}${x.etaTime?" "+x.etaTime:""}${late?" ⚠ overdue":x.eta===today&&!x.done?" (today)":""}</span> • ${esc(x.by||"")}</small>
     <div class="actions" style="margin-top:4px;align-items:center"><label class="check" style="margin:0;font-size:.8rem"><input type="checkbox" data-svdone="${x.id}" ${x.done?"checked":""} style="width:18px;height:18px"> Done</label>
     <button class="sec" data-svdel="${x.id}" style="margin-left:auto">✕</button></div></div>`}).join("")||"<small>No service jobs.</small>"}
 $("svdate").value=fmtD(new Date());
 $("svcform").onsubmit=e=>{e.preventDefault();
-  const x={id:Date.now(),asset:$("svasset").value.trim(),desc:$("svdesc").value.trim(),date:$("svdate").value,eta:$("sveta").value,by:$("from").value};
+  const x={id:Date.now(),asset:$("svasset").value.trim(),desc:$("svdesc").value.trim(),date:$("svdate").value,eta:$("sveta").value,etaTime:$("svtime").value,by:$("from").value};
   svcs.push(x);svsave();pushS(x);$("svcform").reset();$("svdate").value=fmtD(new Date());renderSvc()};
 document.addEventListener("click",e=>{const id=e.target.dataset.svdel;if(!id)return;
   if(!confirm("Remove this service job?"))return;
