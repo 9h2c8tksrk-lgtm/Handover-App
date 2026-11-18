@@ -76,6 +76,15 @@ button:disabled{opacity:.5;cursor:not-allowed}
 :focus-visible{outline:3px solid #4ec3d9;outline-offset:2px}
 summary{cursor:pointer}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+#welcome{position:fixed;inset:0;background:#000c;z-index:30;display:none;align-items:center;justify-content:center;padding:16px}
+#welcome .card{width:100%;max-width:520px;max-height:90vh;overflow-y:auto}
+#welcome h1{margin:0 0 4px;font-size:1.6rem;color:#f2b632}
+.note{padding:10px 12px;margin:8px 0;border-radius:12px;background:#1d2228;border-left:4px solid #5b8def;font-size:.92rem}
+.note.warn{border-color:#e8a317}.note.bad{border-color:#ff6b6b;background:#3a2226}.note.ok{border-color:#6bd68a}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#e8a317;color:#111;font-weight:600;padding:12px 18px;border-radius:999px;z-index:40;display:none;box-shadow:0 4px 16px #0008;max-width:90vw;cursor:pointer}
+.mic{margin-top:6px;padding:6px 12px;font-size:.85rem}
+.mic.on{background:#ff6b6b;color:#111;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.6}}
 </style>
 </head>
 <body>
@@ -107,6 +116,8 @@ summary{cursor:pointer}
   </form>
   <div id="etalist"></div>
 </div></div>
+<div id="welcome"><div class="card" role="dialog" aria-labelledby="wtitle"><h1 id="wtitle"></h1><div id="wbody"></div><div class="actions"><button type="button" id="wclose" style="width:100%">Let's go</button></div></div></div>
+<div id="toast" role="status"></div>
 <div id="lock"><form class="card" id="lockform">
   <h2 id="locktitle">Sign on to shift</h2>
   <div id="lockinfo" style="margin-bottom:8px"></div>
@@ -692,7 +703,7 @@ $("lockform").onsubmit=async e=>{
   const rost=whoOn(parseD(shiftDate()),currentShift());
   if(rost!==u&&!ss.on.some(c=>c.user===rost)&&!confirm(`${rost} is rostered on this ${currentShift().toLowerCase()} shift, not ${u}. Sign on anyway (covering)?`))return;
   if(!ss.on.some(c=>c.user===u))ss.on.push({user:u,at:new Date().toISOString(),shiftKey:here()});
-  ssave();pushShift();$("lock").style.display="none";defaults();render();ptAutoSignIn()};
+  ssave();pushShift();$("lock").style.display="none";defaults();render();ptAutoSignIn();showWelcome(u)};
 // ---- cross-device sync (Supabase handover_sync table) ----
 const SOUT="sync.out.v1", SLAST="sync.last.v1";
 let out=JSON.parse(localStorage.getItem(SOUT)||"[]"), lastSync=localStorage.getItem(SLAST)||"";
@@ -746,6 +757,7 @@ async function pull(){
   rows.forEach(r=>{if(r.kind==="task"&&r.value&&r.value.recur&&r.value.done){
     const i=out.findIndex(o=>o.id===r.id&&o.value&&!o.value.done);if(i>=0){out.splice(i,1);osave()}}});
   const pend=new Set(out.map(o=>o.id)), seen=new Set(), prevCur=JSON.stringify(ss.on);
+  const oldH=new Set(data.map(h=>h.id)), oldT=new Set(tasks.map(t=>t.id));
   applying=true;
   for(const r of rows){seen.add(r.id);lastSync=r.updated_at;if(!pend.has(r.id))applyRow(r)}
   applying=false;
@@ -762,13 +774,74 @@ async function pull(){
   if(JSON.stringify(ss.on)!==prevCur){ // signed on/off from another device
     if(!ss.on.length&&$("lock").style.display!=="flex")openLock();
     else if($("lock").style.display==="flex")openLock(lockOff&&ss.on.length?true:false)}
-  synced=true;render();flush();syncUI()}
+  synced=true;render();flush();syncUI();if(!first)notifyNew(oldH,oldT)}
 window.addEventListener("online",()=>{flush();pull()});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
 setInterval(pull,20000);
 pull();flush();syncUI();
 defaults();render();setInterval(render,60000);
 if(!ss.on.length)openLock();
+
+// ---- welcome screen & notifications ----
+const me=()=>$("from").value;
+function notices(u){
+  const n=[],today=fmtD(new Date());
+  data.filter(h=>h.to===u&&!h.ack).forEach(h=>{
+    const safe=(h.safety||"").trim();
+    n.push({c:safe?"bad":"warn",t:`📝 Handover from <b>${esc(h.from)}</b> (${h.shift} ${h.date}) – please read and acknowledge`+(safe?`<br><span class="flag">⚠ Safety: ${esc(safe.slice(0,160))}</span>`:"")})});
+  data.filter(h=>h.from===u&&!h.ack&&Date.now()-new Date(h.created)>36e5).forEach(h=>
+    n.push({c:"",t:`⏳ Your handover to <b>${esc(h.to)}</b> (${h.shift} ${h.date}) hasn't been acknowledged yet`}));
+  tasks.filter(t=>!t.done&&t.assignTo===u&&(!t.assignShift||t.assignShift===currentShift())).forEach(t=>
+    n.push({c:"warn",t:`👤 Assigned to you: <b>${esc(t.text)}</b>`}));
+  etas.filter(x=>!x.delivered&&x.eta<=today).forEach(x=>
+    n.push({c:x.eta<today?"bad":"ok",t:`📦 ${esc(x.part)}${x.asset?" ("+esc(x.asset)+")":""} – ${x.eta<today?"<b>OVERDUE</b>":"due today"}`}));
+  return n}
+function showWelcome(u){
+  const h=new Date().getHours(),g=h<12?"Good morning":h<17?"Good afternoon":"Good evening";
+  const n=notices(u);
+  $("wtitle").textContent=`${g}, ${u} 👋`;
+  $("wbody").innerHTML=`<p style="margin:0 0 8px;color:#bbb">${currentShift()} shift • ${new Date().toLocaleDateString([],{weekday:"long",day:"numeric",month:"long"})}</p>`+
+    (n.length?`<h2>🔔 ${n.length} notification${n.length>1?"s":""}</h2>`+n.map(x=>`<div class="note ${x.c}">${x.t}</div>`).join(""):`<div class="note ok">✅ All clear – nothing waiting for you.</div>`);
+  $("welcome").style.display="flex";$("wclose").focus();
+  if("Notification" in window&&Notification.permission==="default")Notification.requestPermission().catch(()=>{})}
+$("wclose").onclick=()=>{$("welcome").style.display="none";if(data.some(h=>h.to===me()&&!h.ack))$("pending").scrollIntoView({behavior:"smooth"})};
+let toastT;
+function toast(msg){const t=$("toast");t.textContent=msg;t.style.display="block";clearTimeout(toastT);toastT=setTimeout(()=>t.style.display="none",8000)}
+$("toast").onclick=()=>{$("toast").style.display="none";$("pending").scrollIntoView({behavior:"smooth"})};
+async function osNotify(title,body){
+  if(!("Notification" in window)||Notification.permission!=="granted")return;
+  try{const reg=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration();
+    if(reg)reg.showNotification(title,{body,icon:"icon.svg",tag:"handover"});else new Notification(title,{body,icon:"icon.svg"})}catch{}}
+function notifyNew(oldH,oldT){
+  const u=me();if(!ss.on.some(c=>c.user===u))return;
+  const hs=data.filter(h=>!oldH.has(h.id)&&h.to===u&&!h.ack);
+  const ts=tasks.filter(t=>!oldT.has(t.id)&&!t.done&&t.assignTo===u&&t.by!==u);
+  hs.forEach(h=>{const m=`New handover from ${h.from}`+((h.safety||"").trim()?" – includes a SAFETY note":"");toast("📝 "+m);osNotify("Shift Handover",m)});
+  ts.forEach(t=>{const m=`New task for you: ${t.text}`;toast("👤 "+m);osNotify("Shift Handover",m)})}
+// ---- voice dictation ----
+(function(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;
+  let rec=null,activeBtn=null;
+  const stop=()=>{if(rec){const r=rec;rec=null;r.onend=null;r.stop()}if(activeBtn){activeBtn.classList.remove("on");activeBtn.textContent="🎤 Dictate";activeBtn=null}};
+  function add(el){
+    const b=document.createElement("button");b.type="button";b.className="sec mic";b.textContent="🎤 Dictate";b.setAttribute("aria-label","Dictate into this field");
+    el.after(b);
+    b.onclick=()=>{
+      if(activeBtn===b){stop();return}
+      stop();
+      const r=new SR();r.lang=navigator.language||"en-AU";r.continuous=true;r.interimResults=false;
+      r.onresult=e=>{let t="";for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)t+=e.results[i][0].transcript;
+        t=t.trim();if(!t)return;
+        const sep=el.value&&!/[\s]$/.test(el.value)?" ":"";
+        el.value+=sep+t;el.dispatchEvent(new Event("input",{bubbles:true}))};
+      r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed")alert("Microphone permission was denied.");stop()};
+      r.onend=()=>{if(rec===r)try{r.start()}catch{stop()}}; // browsers end sessions on silence; keep listening
+      rec=r;activeBtn=b;b.classList.add("on");b.textContent="⏹ Stop";
+      try{r.start()}catch{stop()}};
+  }
+  document.querySelectorAll("#form textarea").forEach(add);
+  $("form").addEventListener("submit",stop);
+})();
 if("serviceWorker" in navigator&&location.protocol.startsWith("http"))addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 </script>
 </body>
