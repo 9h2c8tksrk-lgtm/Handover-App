@@ -845,6 +845,10 @@ function notices(u){
     n.push({c:"warn",t:`👤 Assigned to you: <b>${esc(t.text)}</b>`}));
   etas.filter(x=>!x.delivered&&x.eta<=today).forEach(x=>
     n.push({c:x.eta<today?"bad":"ok",t:`📦 ${esc(x.part)}${x.asset?" ("+esc(x.asset)+")":""} – ${x.eta<today?"<b>OVERDUE</b>":"due today"}`}));
+  const wk=fmtD(addDays(new Date(),7));
+  svcs.filter(x=>!x.done&&x.eta<=wk).sort((a,b)=>a.eta<b.eta?-1:a.eta>b.eta?1:0).forEach(x=>{
+    const late=x.eta<today,t=x.etaTime?" "+x.etaTime:"";
+    n.push({c:late?"bad":x.eta===today?"warn":"",t:`🛠 Service job: <b>${esc(x.asset)}</b> – ${esc(x.desc)}<br><small>ETA ${fmtShort(x.eta)}${t}${late?" – <b>OVERDUE</b>":x.eta===today?" – due today":""}</small>`})});
   return n}
 function showWelcome(u){
   const h=new Date().getHours(),g=h<12?"Good morning":h<17?"Good afternoon":"Good evening";
