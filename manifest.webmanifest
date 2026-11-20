@@ -1,0 +1,13 @@
+{
+  "name": "Shift Handover",
+  "short_name": "Handover",
+  "description": "Shift handover app for the workshop crew",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1b1f24",
+  "theme_color": "#e8a317",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

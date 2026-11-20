@@ -1,108 +1,732 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shift Handover</title>
-<script src="https://unpkg.com/html5-qrcode"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shift Handover</title>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-*{box-sizing:border-box}body{font-family:system-ui,sans-serif;margin:0;background:#1b1f24;color:#eee}header{padding:14px 16px;background:#e8a317;color:#111;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}h1{margin:0;font-size:1.3rem}main{max-width:800px;margin:auto;padding:12px}.card{background:#262c33;border-radius:10px;padding:14px;margin-bottom:14px}h2{margin:0 0 10px;color:#e8a317;font-size:1.1rem}h3{font-size:1rem}label{display:block;font-size:.86rem;margin:10px 0 4px;color:#bbb}input,select,textarea{width:100%;padding:10px;font:inherit;border-radius:6px;border:1px solid #444;background:#12161a;color:#eee}textarea{min-height:80px;resize:vertical}.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}button{padding:10px 14px;border:0;border-radius:6px;background:#e8a317;color:#111;font:600 .95rem system-ui;cursor:pointer}button.sec{background:#3a424b;color:#eee}button:disabled{opacity:.5;cursor:not-allowed}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.tabs button{flex:1;min-width:105px;background:#3a424b;color:#eee}.tabs button.active{background:#e8a317;color:#111}.entry{border-left:4px solid #e8a317;background:#1f242a;border-radius:6px;padding:10px;margin:10px 0}.entry.night{border-color:#5b8def}.entry pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}.entry small,.muted{color:#aaa}.flag{color:#ff6b6b}.ack{color:#6bd68a}.check{display:flex;align-items:center;gap:10px;margin:8px 0}.check input{width:22px;height:22px;flex:none}.task{display:flex;gap:8px;align-items:center;padding:8px;background:#1f242a;border-radius:6px;margin:6px 0}.task input{width:22px;height:22px;flex:none}.task .content{flex:1;min-width:0;overflow-wrap:anywhere}.task.done .content{text-decoration:line-through;color:#888}.tag{display:inline-block;background:#5b8def;color:#111;font-size:.7rem;border-radius:4px;padding:2px 5px;margin-right:5px}.tag.order{background:#e8a317}.tag.recur{background:#b48ef0}.tag.roll{background:#ff6b6b}.tag.assign{background:#6bd68a}.tag.work{background:#4ec3d9}table.r{border-collapse:collapse;width:100%;font-size:.8rem}table.r th,table.r td{border:1px solid #3a424b;padding:6px;text-align:center}table.r .D{background:#5a4a12}table.r .N{background:#1f3560}table.r .O{color:#777}table.r tr.today{outline:2px solid #e8a317}#lock,#scanbox,#etabox{position:fixed;inset:0;background:#000e;z-index:20;display:none;align-items:center;justify-content:center;padding:12px}#lock .card,#scanbox .card,#etabox .card{width:100%;max-width:520px;max-height:90vh;overflow:auto}#lock{background:#1b1f24;z-index:30}#who{display:flex;align-items:center;gap:8px;flex-wrap:wrap}#who button{padding:5px 9px;font-size:.85rem}#lxcard.lx-watch{background:#6b5412}#lxcard.lx-danger{background:#7a2a2a}#lxcard.lx-danger h2{color:#fff}[hidden]{display:none!important}@media(max-width:420px){.row{flex-direction:column;gap:0}.tabs button{min-width:90px}}@media(min-width:1300px){#etacard{position:fixed;top:70px;left:calc(50% + 420px);right:16px;max-width:360px;max-height:80vh;overflow:auto}#lxcard{position:fixed;top:70px;right:calc(50% + 420px);left:16px;max-width:360px}}
-</style></head><body>
-<header><h1>🔧 Shift Handover</h1><div id="who"><span id="sync"></span><span id="now"></span><span id="onshift"></span><button class="sec" id="supview" hidden>👁 Handovers view</button><button class="sec" id="signon">Sign on</button><button class="sec" id="signoff">Sign off</button></div></header>
-<div id="lock"><form id="lockform" class="card"><h2 id="locktitle">Sign on</h2><div id="lockinfo"></div><label>Name</label><select id="su"></select><label>PIN (4–6 digits)</label><input id="spin" type="password" inputmode="numeric" maxlength="6" required><div id="newpin"><label>Confirm new PIN</label><input id="spin2" type="password" inputmode="numeric" maxlength="6"></div><p id="lockerr" class="flag"></p><button id="locksub" style="width:100%">Sign on</button><button type="button" id="lockcancel" class="sec" style="width:100%;margin-top:8px">Cancel</button></form></div>
-<div id="scanbox"><div class="card"><h2>📷 Scan parts to order</h2><div id="reader"></div><p id="sbstat" class="muted"></p><form id="sbform" hidden><div class="row"><input id="sbemail" type="email" placeholder="Parts Tracker email"><input id="sbpass" type="password" placeholder="Password"></div><button>Sign in to Parts Tracker</button></form><p id="scanmsg">Point camera at barcode. Repeat scans increase quantity.</p><div class="row"><input id="manual" placeholder="Barcode / part number"><button type="button" id="manualadd">Add</button></div><div class="actions"><button type="button" class="sec" id="scandone">Done</button></div></div></div>
-<div id="etabox"><div class="card"><h2>📦 Special order parts – ETA</h2><form id="eform"><div class="row"><div><label>Asset number</label><input id="easset"></div><div><label>WO number</label><input id="ewo"></div></div><label>Part number</label><input id="epart" required><label>Description</label><input id="edesc"><label>ETA</label><input id="eeta" type="date" required><div class="actions"><button>Add</button><button type="button" id="etaclose" class="sec">Close</button></div></form><div id="etalist"></div></div></div>
-<main><div id="lxcard" class="card"><h2>⚡ Lightning – Golden Eagle</h2><div id="lxbody"></div></div><div id="etacard" class="card" hidden><h2>📦 Special orders – awaiting delivery</h2><button class="sec" id="etamanage">Update / tick off</button><div id="etasummary" style="overflow-x:auto"></div></div><div id="banner"></div><div id="pending"></div>
-<div class="tabs" id="mainTabs"><button type="button" data-page="home" class="active">🏠 Handover</button><button type="button" data-page="warranties">🔧 Warranties</button></div>
-<div id="page-home"><section class="card" id="plannercard"><h2>📋 Day planner – to do &amp; to order</h2><div class="tabs"><button data-ttab="open" class="active">📋 To do</button><button data-ttab="done">✅ Completed</button></div><div id="tactions" class="actions"><button id="tscan">📷 Scan part to order</button><button class="sec" id="etaopen">📦 Special order ETA</button><a href="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/" target="_blank" rel="noopener"><button type="button" class="sec">🔩 Open Parts Tracker</button></a></div><form id="tform" class="row" style="flex-wrap:wrap"><select id="ttype"><option value="task">Task</option><option value="order">Order part</option></select><input id="ttext" placeholder="Add item…" required><select id="tassign" class="supx" hidden><option value="">Anyone</option></select><select id="tshift" class="supx" hidden><option value="">Any shift</option><option>Day</option><option>Night</option></select><button>Add</button></form><div id="tasks"></div></section>
-<form id="form" class="card"><h2>New handover</h2><div class="row"><div><label>Handing over (you)</label><select id="from" disabled></select></div><div><label>Taking over</label><select id="to"></select></div></div><div class="row"><div><label>Shift ending</label><select id="shift"><option>Day</option><option>Night</option></select></div><div><label>Shift date</label><input id="date" type="date"></div></div><label>Jobs in progress</label><textarea id="inprog"></textarea><label>Jobs completed</label><textarea id="done"></textarea><label>Parts / stock – ordered, arriving, running low</label><textarea id="parts"></textarea><label>Equipment, tools &amp; vehicles – faults / out of service</label><textarea id="equip"></textarea><label>Safety issues / incidents / near misses</label><textarea id="safety"></textarea><label>Other notes</label><textarea id="notes"></textarea><h2>End-of-shift checklist</h2><label class="check"><input class="chk" type="checkbox">Workshop &amp; store tidied, floors clear</label><label class="check"><input class="chk" type="checkbox">Tools returned &amp; accounted for</label><label class="check"><input class="chk" type="checkbox">Parts booked in/out, stock sheet updated</label><label class="check"><input class="chk" type="checkbox">Hazards made safe / signed off</label><label class="check"><input class="chk" type="checkbox">Store &amp; vehicles/equipment secured</label><div class="actions"><button>Submit handover</button><button type="reset" class="sec">Clear</button></div></form>
-<details id="rosterbox" class="card"><summary><b style="color:#e8a317">📅 Roster – 7 days, 7 nights, 7 off</b> <span id="rtoday"></span></summary><div id="roster" style="overflow-x:auto"></div></details><section class="card"><h2>History</h2><div class="actions"><button id="export" class="sec">Export JSON</button><button id="clear" class="sec">Clear all</button></div><div id="history"></div></section></div>
-<section id="page-warranties" hidden><div class="card"><h2>🔧 Warranty Register</h2><p class="muted">Claims sync through the existing handover_sync table. Changes appear on other devices when sync is available.</p><form id="wform"><input type="hidden" id="wid"><div class="row"><div><label>Date raised</label><input id="wdate" type="date" required></div><div><label>Asset number</label><input id="wasset" placeholder="PA247"></div></div><div class="row"><div><label>Work order</label><input id="wwo"></div><div><label>Supplier</label><input id="wsupplier" required></div></div><label>Part number</label><input id="wpart" required><label>Part description</label><input id="wdesc"><label>Reason for warranty</label><textarea id="wreason"></textarea><div class="row"><div><label>Warranty number</label><input id="wno"></div><div><label>Claim number</label><input id="wclaim"></div></div><label>Status</label><select id="wstatus"><option>Pending</option><option>Awaiting Supplier</option><option>Approved</option><option>Return Required</option><option>Rejected</option><option>Completed</option></select><label>Notes / follow-up</label><textarea id="wnotes"></textarea><div class="actions"><button id="wsavebtn">Save warranty</button><button type="button" class="sec" id="wcancel">Clear / cancel edit</button></div></form></div><div class="card"><h2>Warranty Claims</h2><label>Filter status</label><select id="wfilter"><option value="open">Outstanding</option><option value="all">All claims</option><option value="Completed">Completed</option><option value="Rejected">Rejected</option></select><div id="wlist"></div></div></section>
-</main><script>
-'use strict';
-const $=id=>document.getElementById(id), CREW=['Carl','Declan','Lockie'], USERS=[...CREW,'Hayden','Stuart'], SUPS=['Hayden','Stuart'];
-const get=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}},put=(key,v)=>localStorage.setItem(key,JSON.stringify(v));
-let data=get('handovers.v1',[]),tasks=get('planner.v1',[]),etas=get('eta.v1',[]),warranties=get('warranties.v1',[]),ss=get('shift.v1',{on:[],log:[]}),pins=get('pins.v1',{}),rseen=get('recur.seen.v1',[]),supMode=false,ttab='open',page='home';
-if(!Array.isArray(ss.on)){ss.on=ss.cur?[ss.cur]:[];delete ss.cur}
-const save=()=>put('handovers.v1',data),tsave=()=>put('planner.v1',tasks),esave=()=>put('eta.v1',etas),wsave=()=>put('warranties.v1',warranties),ssave=()=>put('shift.v1',ss);
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmtD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-const parseD=s=>{const [y,m,d]=String(s||'').split('-').map(Number);return new Date(y,m-1,d)};
+*{box-sizing:border-box}
+body{font-family:system-ui,sans-serif;margin:0;background:#1b1f24;color:#eee}
+header{padding:14px 16px;background:#e8a317;color:#111;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+header h1{margin:0;font-size:1.3rem}
+main{max-width:760px;margin:0 auto;padding:12px}
+.card{background:#262c33;border-radius:10px;padding:14px;margin-bottom:14px}
+h2{margin:0 0 10px;font-size:1.05rem;color:#e8a317}
+label{display:block;font-size:.85rem;margin:10px 0 4px;color:#bbb}
+input,select,textarea{width:100%;padding:10px;font-size:1rem;border-radius:6px;border:1px solid #444;background:#12161a;color:#eee}
+textarea{min-height:80px;resize:none;overflow:hidden}
+.row{display:flex;gap:10px}.row>*{flex:1}
+button{padding:11px 16px;font-size:1rem;border:0;border-radius:6px;background:#e8a317;color:#111;font-weight:600;cursor:pointer}
+button.sec{background:#3a424b;color:#eee}
+.check{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:1rem;color:#eee}
+.check input{width:22px;height:22px}
+.entry{border-left:4px solid #e8a317;padding:8px 12px;margin:10px 0;background:#1f242a;border-radius:6px}
+.entry.night{border-color:#5b8def}
+.entry small{color:#aaa}
+.entry pre{white-space:pre-wrap;font-family:inherit;margin:6px 0}
+.flag{color:#ff6b6b;font-weight:600}
+.ack{color:#6bd68a}
+.task{display:flex;align-items:center;gap:10px;padding:8px;margin:6px 0;background:#1f242a;border-radius:6px}
+.task input{width:22px;height:22px;flex:none}
+.task.done span{text-decoration:line-through;color:#888}
+.task.done .tag{text-decoration:none;opacity:.75}
+.task .m{font-size:.75rem;color:#aaa;display:block}
+.tag{font-size:.7rem;padding:2px 6px;border-radius:4px;background:#5b8def;color:#111;margin-right:6px}
+.tag.order{background:#e8a317}.tag.roll{background:#ff6b6b}.tag.recur{background:#b48ef0}.tag.assign{background:#6bd68a}.tag.work{background:#4ec3d9}
+.task button{padding:4px 8px;font-size:.8rem;margin-left:auto}
+.task button+button{margin-left:6px}
+.tabs{display:flex;gap:6px;margin:0 0 10px}
+.tabs button{flex:1;background:#3a424b;color:#eee;padding:8px;font-size:.9rem}
+.tabs button.active{background:#e8a317;color:#111}
+#lock{position:fixed;inset:0;background:#1b1f24;z-index:10;display:none;align-items:center;justify-content:center;padding:16px}
+#lock .card{width:100%;max-width:380px}
+#lock .err{color:#ff6b6b;min-height:1.2em;margin:8px 0}
+#banner .card{background:#7a2a2a}
+#who{display:flex;gap:8px;align-items:center}#who button{padding:5px 10px;font-size:.85rem}
+table.r{border-collapse:collapse;width:100%;font-size:.8rem;margin-top:10px}
+table.r th,table.r td{border:1px solid #3a424b;padding:5px;text-align:center}
+table.r .D{background:#5a4a12}table.r .N{background:#1f3560}table.r .O{background:#1f242a;color:#777}
+table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
+#scanbox,#etabox{position:fixed;inset:0;background:#000d;z-index:20;display:none;align-items:center;justify-content:center;padding:12px}
+#scanbox .card{width:100%;max-width:420px}
+#etabox .card{width:100%;max-width:520px;max-height:90vh;overflow-y:auto}
+#scanmsg{min-height:2.4em;margin:8px 0;color:#6bd68a}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+@media (min-width:1300px){
+  #etacard{position:fixed;top:70px;left:calc(50% + 396px);right:16px;max-width:360px;max-height:calc(100vh - 90px);overflow-y:auto;z-index:5}
+  #lxcard{position:fixed;top:70px;right:calc(50% + 396px);left:16px;max-width:360px;z-index:5;margin-left:auto}
+}
+#lxcard.lx-watch{background:#6b5412}
+#lxcard.lx-danger{background:#7a2a2a}
+#lxcard.lx-danger h2{color:#fff}
+#lxcard small{color:#bbb}
+</style>
+</head>
+<body>
+<header><h1>🔧 Shift Handover</h1><div id="who"><span id="sync" style="font-size:.8rem"></span><span id="now"></span><span id="onshift"></span><button id="supview" class="sec" style="display:none">👁 Handovers view</button><button id="signon" class="sec">Sign on</button><button id="signoff" class="sec">Sign off</button></div></header>
+<div id="scanbox"><div class="card">
+  <h2>Scan parts to order</h2>
+  <div id="reader"></div>
+  <div id="sbstat" style="font-size:.85rem;color:#bbb"></div>
+  <form id="sbform" style="display:none;margin:6px 0">
+    <div class="row"><input id="sbemail" type="email" placeholder="Parts Tracker email" autocomplete="username"><input id="sbpass" type="password" placeholder="Password" autocomplete="current-password"></div>
+    <button style="margin-top:6px;width:100%">Sign in to Parts Tracker</button>
+  </form>
+  <div id="scanmsg">Point the camera at a barcode. Repeat scans add to the quantity.</div>
+  <div class="row"><input id="manual" placeholder="Or type barcode / part no."><button type="button" id="manualadd" style="flex:0 0 auto">Add</button></div>
+  <div class="actions"><button type="button" class="sec" id="scandone">Done</button></div>
+</div></div>
+<div id="etabox"><div class="card">
+  <h2>📦 Special order parts – ETA</h2>
+  <p style="font-size:.8rem;color:#aaa;margin:0 0 8px">Special order parts only. Update the ETA if it changes and tick parts off when they're delivered.</p>
+  <form id="eform">
+    <div class="row">
+      <div><label>Asset number</label><input id="easset" placeholder="e.g. LD123"></div>
+      <div><label>WO number</label><input id="ewo" placeholder="e.g. WO45678"></div>
+    </div>
+    <label>Part number</label><input id="epart" placeholder="Part number" required>
+    <label>Description</label><input id="edesc" placeholder="Part description">
+    <label>ETA</label><input type="date" id="eeta" required>
+    <div class="actions"><button type="submit">Add</button><button type="button" class="sec" id="etaclose">Close</button></div>
+  </form>
+  <div id="etalist"></div>
+</div></div>
+<div id="lock"><form class="card" id="lockform">
+  <h2 id="locktitle">Sign on to shift</h2>
+  <div id="lockinfo" style="margin-bottom:8px"></div>
+  <label>Name</label><select id="su"></select>
+  <label>PIN (4–6 digits)</label><input id="spin" type="password" inputmode="numeric" autocomplete="off" maxlength="6">
+  <div id="newpin" style="display:none"><label>First time – confirm new PIN</label><input id="spin2" type="password" inputmode="numeric" autocomplete="off" maxlength="6"></div>
+  <div class="err" id="lockerr"></div>
+  <button id="locksub" style="width:100%">Sign on</button>
+  <button type="button" id="lockcancel" class="sec" style="width:100%;margin-top:8px;display:none">Cancel</button>
+</form></div>
+<main>
+<div class="card" id="lxcard" style="display:none">
+  <h2>⚡ Lightning – Golden Eagle</h2>
+  <div id="lxbody" style="font-size:.9rem"></div>
+</div>
+<div class="card" id="etacard" style="display:none">
+  <h2 style="display:flex;align-items:center;justify-content:space-between">📦 Special orders – awaiting delivery
+    <button type="button" class="sec" id="etamanage" style="padding:5px 10px;font-size:.8rem">Update / tick off</button></h2>
+  <div id="etasummary" style="overflow-x:auto"></div>
+</div>
+<div id="banner"></div>
+<div id="pending"></div>
+
+<div class="card" id="plannercard">
+  <h2>📋 Day planner – to do &amp; to order</h2>
+  <div class="tabs"><button type="button" class="active" data-ttab="open" id="tabopen">📋 To do</button><button type="button" data-ttab="done" id="tabdone">✅ Completed</button></div>
+  <div class="actions" id="tactions" style="margin:0 0 10px"><button type="button" id="tscan">📷 Scan part to order</button>
+  <button type="button" class="sec" id="etaopen">📦 Special order ETA</button>
+  <a href="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/" target="_blank" rel="noopener"><button type="button" class="sec">🔩 Open Parts Tracker</button></a></div>
+  <form id="tform" class="row" style="align-items:stretch;flex-wrap:wrap">
+    <select id="ttype" style="flex:0 0 120px"><option value="task">Task</option><option value="order">Order part</option></select>
+    <input id="ttext" placeholder="Add item…" required style="flex:3">
+    <select id="tassign" class="supx" style="flex:0 0 110px;display:none"><option value="">Anyone</option></select>
+    <select id="tshift" class="supx" style="flex:0 0 100px;display:none"><option value="">Any shift</option><option>Day</option><option>Night</option></select>
+    <button style="flex:0 0 auto">Add</button>
+  </form>
+  <div id="tasks"></div>
+</div>
+
+<form id="form" class="card">
+  <h2>New handover</h2>
+  <div class="row">
+    <div><label>Handing over (you)</label><select id="from"></select></div>
+    <div><label>Taking over</label><select id="to"></select></div>
+  </div>
+  <div class="row">
+    <div><label>Shift ending</label>
+      <select id="shift"><option value="Day">Day (5am–5pm)</option><option value="Night">Night (5pm–5am)</option></select></div>
+    <div><label>Shift date</label><input type="date" id="date"></div>
+  </div>
+  <label>Jobs in progress (what's left to do)</label><textarea id="inprog"></textarea>
+  <label>Jobs completed</label><textarea id="done"></textarea>
+  <label>Parts / stock – ordered, arriving, or running low</label><textarea id="parts"></textarea>
+  <label>Equipment, tools & vehicles – faults or out of service</label><textarea id="equip"></textarea>
+  <label>Safety issues / incidents / near misses</label><textarea id="safety"></textarea>
+  <label>Other notes (deliveries, visitors, customers, callbacks)</label><textarea id="notes"></textarea>
+  <h2 style="margin-top:16px">End-of-shift checklist</h2>
+  <label class="check"><input type="checkbox" class="chk"> Workshop & store tidied, floors clear</label>
+  <label class="check"><input type="checkbox" class="chk"> Tools returned & accounted for</label>
+  <label class="check"><input type="checkbox" class="chk"> Parts booked in/out, stock sheet updated</label>
+  <label class="check"><input type="checkbox" class="chk"> Hazards made safe / signed off</label>
+  <label class="check"><input type="checkbox" class="chk"> Store & vehicles/equipment locked or secured</label>
+  <div class="actions"><button type="submit">Submit handover</button><button type="reset" class="sec">Clear</button></div>
+</form>
+
+<details class="card" id="rosterbox">
+  <summary><b style="color:#e8a317">📅 Roster – 7 days, 7 nights, 7 off</b> <span id="rtoday"></span></summary>
+  <div id="roster" style="overflow-x:auto"></div>
+</details>
+
+<div class="card">
+  <h2>History</h2>
+  <div class="actions"><button class="sec" id="export">Export JSON</button><button class="sec" id="clear">Clear all</button></div>
+  <div id="history"></div>
+</div>
+</main>
+<script>
+const CREW=["Carl","Declan","Lockie"], KEY="handovers.v1", ME="handover.me";
+// Everyone who can sign on / hand over. CREW are on the 21-day roster cycle; the rest aren't rostered.
+const USERS=[...CREW,"Hayden","Stuart"];
+const SUPS=["Hayden","Stuart"]; // can assign tasks and use the handovers-only view
+const isSup=()=>SUPS.includes($("from").value);
+let supMode=false;
+const $=id=>document.getElementById(id);
+const TKEY="planner.v1";
+let tasks=JSON.parse(localStorage.getItem(TKEY)||"[]");
+const tsave=()=>localStorage.setItem(TKEY,JSON.stringify(tasks));
+let data=JSON.parse(localStorage.getItem(KEY)||"[]");
+const save=()=>localStorage.setItem(KEY,JSON.stringify(data));
+
+function currentShift(d=new Date()){const h=d.getHours();return h>=5&&h<17?"Day":"Night"}
+// Night shift after midnight belongs to the date it started
+function shiftDate(d=new Date()){const x=new Date(d);if(d.getHours()<5)x.setDate(x.getDate()-1);
+  return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")}
+
+USERS.forEach(n=>{$("from").add(new Option(n,n));$("to").add(new Option(n,n));$("tassign").add(new Option(n,n))});
+function defaults(){
+  if(ss.on.length)$("from").value=ss.on[ss.on.length-1].user;
+  $("shift").value=currentShift();$("date").value=shiftDate();setTo();
+}
+// 21-day cycle: 7 days, 7 nights, 7 off. Offsets from Tue 17 Nov 2026 (Carl's first day shift).
+const REF=new Date(2026,10,17), OFFSET={Carl:0,Lockie:7,Declan:14};
+const parseD=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
+const fmtD=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
-const currentShift=(d=new Date())=>d.getHours()>=5&&d.getHours()<17?'Day':'Night';
-const shiftDate=(d=new Date())=>{const x=new Date(d);if(x.getHours()<5)x.setDate(x.getDate()-1);return fmtD(x)};
-const here=()=>currentShift()+' '+shiftDate(),isSup=()=>SUPS.includes($('from').value);
-const REF=new Date(2026,10,17),OFFSET={Carl:0,Lockie:7,Declan:14};
-const pos=(n,d)=>(((Math.round((d-REF)/864e5)+OFFSET[n])%21)+21)%21;
-const status=(n,d)=>{const p=pos(n,d);return p<7?'D':p<14?'N':'O'};
-const whoOn=(d,sh)=>CREW.find(n=>status(n,d)===(sh==='Day'?'D':'N'));
-const setTo=()=>{if(!$('date').value)return;const d=parseD($('date').value);$('to').value=$('shift').value==='Day'?whoOn(d,'Night'):whoOn(addDays(d,1),'Day')};
-function defaults(){if(ss.on.length)$('from').value=ss.on[ss.on.length-1].user;$('shift').value=currentShift();$('date').value=shiftDate();setTo()}
-USERS.forEach(n=>{['from','to','su','tassign'].forEach(id=>$(id).add(new Option(n,n)))});
-$('shift').onchange=$('date').onchange=setTo;$('form').addEventListener('reset',()=>setTimeout(defaults));
-function renderRoster(){const d=parseD(shiftDate());$('rtoday').textContent=' — Day '+whoOn(d,'Day')+', Night '+whoOn(d,'Night');const note={0:'first day',6:'last day',7:'first night',13:'last night'};let html='<table class="r"><tr><th>Date</th>'+CREW.map(n=>'<th>'+n+'</th>').join('')+'</tr>';for(let i=-1;i<21;i++){const day=addDays(d,i);html+='<tr class="'+(i===0?'today':'')+'"><th>'+day.toLocaleDateString([],{weekday:'short',day:'numeric',month:'short'})+'</th>'+CREW.map(n=>{const p=pos(n,day),s=status(n,day);return '<td class="'+s+'">'+({D:'Day',N:'Night',O:'Off'}[s])+(note[p]?'<br><small>'+note[p]+'</small>':'')+'</td>'}).join('')+'</tr>'}$('roster').innerHTML=html+'</table>'}
-const RECUR=[{dow:1,shift:'Day',text:'Check with Stores Port Hedland that cages will be returned to suppliers'},{dow:3,shift:'Night',text:'Stock count – McPhee ROM'},{dow:3,shift:'Day',text:'Follow up open purchase orders with suppliers'},{dow:4,shift:'Day',text:'Check if waste oil IBCs have been organised'},{dow:2,shift:'Day',text:'Tyre orders – check if placed'},{dow:2,shift:'Night',text:'Check oils and lubricants'},{dow:4,shift:'Night',text:'Check sundries and re-order'}];
-function spawnRecurring(){const date=shiftDate(),sh=currentShift();RECUR.forEach((r,i)=>{if(r.dow!==parseD(date).getDay()||r.shift!==sh)return;const id=parseD(date).getTime()+5*36e5+i;if(rseen.includes(id)||tasks.some(t=>t.id===id))return;const t={id,type:'task',recur:true,text:r.text,by:'Recurring',shiftKey:here(),done:false};tasks.push(t);rseen.push(id);tsave();put('recur.seen.v1',rseen);pushT(t)})}
-function renderTasks(){const open=tasks.filter(t=>!t.done),done=tasks.filter(t=>t.done).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));document.querySelector('[data-ttab="open"]').textContent='📋 To do ('+open.length+')';document.querySelector('[data-ttab="done"]').textContent='✅ Completed ('+done.length+')';document.querySelectorAll('[data-ttab]').forEach(b=>b.classList.toggle('active',b.dataset.ttab===ttab));$('tactions').hidden=$('tform').hidden=ttab!=='open';const row=t=>'<div class="task '+(t.done?'done':'')+'"><input type="checkbox" data-tick="'+t.id+'" '+(t.done?'checked':'')+'><div class="content"><span class="tag '+esc(t.type)+'">'+(t.type==='order'?'ORDER':'TASK')+'</span>'+(t.recur?'<span class="tag recur">🔁 WEEKLY</span>':'')+(t.assignTo||t.assignShift?'<span class="tag assign">'+esc(t.assignTo||'Anyone')+' '+esc(t.assignShift||'')+'</span>':'')+(t.workingBy?'<span class="tag work">🔧 '+esc(t.workingBy)+' on it</span>':'')+(!t.done&&t.shiftKey!==here()?'<span class="tag roll">ROLLED OVER</span>':'')+esc(t.text)+(t.qty>1?' ×'+t.qty:'')+'<br><small class="muted">Added by '+esc(t.by)+' – '+esc(t.shiftKey)+(t.done?' • done by '+esc(t.doneBy):'')+'</small></div>'+(t.done?'':'<button class="sec" data-twork="'+t.id+'">'+(t.workingBy?'Stop':'I’m on it')+'</button>')+'<button class="sec" data-tdel="'+t.id+'">✕</button></div>';
-const arr=ttab==='done'?done:open;$('tasks').innerHTML=arr.length?arr.map(row).join(''):'<p>Nothing '+(ttab==='done'?'completed yet.':'outstanding 🎉')+'</p>'}
-$('tform').onsubmit=e=>{e.preventDefault();const t={id:Date.now(),text:$('ttext').value.trim(),type:$('ttype').value,by:$('from').value,shiftKey:here(),done:false};if(!t.text)return;if(isSup()){t.assignTo=$('tassign').value;t.assignShift=$('tshift').value}tasks.push(t);tsave();pushT(t);$('tform').reset();render()};
-function renderEtas(){const open=etas.filter(x=>!x.delivered).sort((a,b)=>a.eta.localeCompare(b.eta));$('etaopen').textContent='📦 Special order ETA'+(open.length?' ('+open.length+')':'');$('etacard').hidden=!open.length||supMode||page!=='home';$('etasummary').innerHTML='<table class="r"><tr><th>Asset</th><th>Part</th><th>Description</th><th>ETA</th></tr>'+open.map(x=>'<tr><td>'+esc(x.asset)+'</td><td>'+esc(x.part)+'</td><td>'+esc(x.desc)+'</td><td class="'+(x.eta<fmtD(new Date())?'flag':'')+'">'+esc(x.eta)+'</td></tr>').join('')+'</table>';
-if($('etabox').style.display!=='flex')return;$('etalist').innerHTML=etas.map(x=>'<div class="entry" '+(x.delivered?'style="opacity:.55"':'')+'><b>'+esc(x.part)+'</b> '+esc(x.desc)+'<br><small>'+esc(x.asset)+' • WO '+esc(x.wo)+' • '+esc(x.by)+'</small><p>'+(x.delivered?'✔ Delivered '+esc(x.delivered):'ETA '+esc(x.eta))+'</p><div class="actions"><label class="check"><input type="checkbox" data-edone="'+x.id+'" '+(x.delivered?'checked':'')+'> Delivered</label>'+(x.delivered?'':'<label>Update ETA<input type="date" data-eupd="'+x.id+'" value="'+esc(x.eta)+'"></label>')+'<button class="sec" data-edel="'+x.id+'">Delete</button></div></div>').join('')||'<p>No special orders.</p>'}
-$('etaopen').onclick=$('etamanage').onclick=()=>{$('etabox').style.display='flex';renderEtas()};$('etaclose').onclick=()=>{$('etabox').style.display='none';renderEtas()};
-$('eform').onsubmit=e=>{e.preventDefault();const x={id:Date.now(),asset:$('easset').value.trim(),wo:$('ewo').value.trim(),part:$('epart').value.trim(),desc:$('edesc').value.trim(),eta:$('eeta').value,by:$('from').value,shiftKey:here()};etas.push(x);esave();pushE(x);$('eform').reset();renderEtas()};
-function renderWarranties(){const filter=$('wfilter').value;const list=warranties.filter(w=>filter==='all'||(filter==='open'?!['Completed','Rejected'].includes(w.status):w.status===filter)).sort((a,b)=>String(b.updatedAt||b.id).localeCompare(String(a.updatedAt||a.id)));$('wlist').innerHTML=list.map(w=>'<div class="entry"><b>'+esc(w.part)+' • '+esc(w.asset)+'</b><br><small>'+esc(w.supplier)+' • '+esc(w.date)+' • '+esc(w.status)+'</small><pre>WO: '+esc(w.wo)+'\nDescription: '+esc(w.description)+'\nReason: '+esc(w.reason)+'\nWarranty no: '+esc(w.warrantyNo)+'\nClaim no: '+esc(w.claimNo)+'\nNotes: '+esc(w.notes)+'\nRaised by: '+esc(w.by)+'</pre><div class="actions"><button data-wedit="'+w.id+'">Edit</button><button class="sec" data-wdel="'+w.id+'">Delete</button></div></div>').join('')||'<p>No matching warranty claims.</p>'}
-const WFIELDS={date:'wdate',asset:'wasset',wo:'wwo',supplier:'wsupplier',part:'wpart',description:'wdesc',reason:'wreason',warrantyNo:'wno',claimNo:'wclaim',status:'wstatus',notes:'wnotes'};
-function resetW(){$('wform').reset();$('wid').value='';$('wdate').value=fmtD(new Date());$('wsavebtn').textContent='Save warranty'}
-$('wcancel').onclick=resetW;$('wfilter').onchange=renderWarranties;
-$('wform').onsubmit=e=>{e.preventDefault();const id=$('wid').value,old=warranties.find(w=>String(w.id)===id);const w={...(old||{}),id:old?old.id:Date.now(),by:old?old.by:$('from').value,updatedBy:$('from').value,updatedAt:new Date().toISOString()};Object.entries(WFIELDS).forEach(([key,field])=>w[key]=$(field).value.trim());if(old)warranties=warranties.map(x=>x.id===old.id?w:x);else warranties.push(w);wsave();pushW(w);resetW();renderWarranties()};
-function editW(id){const w=warranties.find(x=>String(x.id)===String(id));if(!w)return;$('wid').value=w.id;Object.entries(WFIELDS).forEach(([key,field])=>$(field).value=w[key]||'');$('wsavebtn').textContent='Update warranty';$('wform').scrollIntoView({behavior:'smooth'})}
-function setPage(p){page=p;document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===p));$('page-home').hidden=p!=='home';$('page-warranties').hidden=p!=='warranties';renderEtas();renderWarranties()}
-function body(h){const fields=[['Jobs in progress','inprog'],['Completed','done'],['Parts / stock','parts'],['Equipment','equip'],['Safety','safety'],['Notes','notes']];return fields.map(([title,key])=>{let v=String(h[key]||'').trim();if(key==='done'&&h.completedTasks?.length)v+=(v?'\n':'')+h.completedTasks.map(x=>'✔ '+x).join('\n');return v?'<b class="'+(key==='safety'?'flag':'')+'">'+title+'</b><pre>'+esc(v)+'</pre>':''}).join('')+(h.open?.length?'<b>Rolled over</b><pre>'+esc(h.open.join('\n'))+'</pre>':'')+(h.specialOrders?.length?'<b>📦 Special orders not delivered</b><pre>'+esc(h.specialOrders.join('\n'))+'</pre>':'')+'<small>Checklist '+esc(h.checks)+'</small>'}
-function entry(h){return '<div class="entry '+String(h.shift||'').toLowerCase()+'"><b>'+esc(h.shift)+' shift '+esc(h.date)+'</b> — '+esc(h.from)+' → '+esc(h.to)+'<br><small>'+new Date(h.created).toLocaleString()+'</small>'+body(h)+'<div class="actions">'+(h.ack?'<span class="ack">✔ Acknowledged by '+esc(h.ack.by)+'</span>':'<button data-ack="'+h.id+'" '+(h.to!==$('from').value?'disabled':'')+'>I’ve read this ('+esc(h.to)+')</button>')+'<button class="sec" data-copy="'+h.id+'">Copy</button><button class="sec" data-del="'+h.id+'">Delete</button></div></div>'}
-function render(){spawnRecurring();const me=$('from').value,sup=isSup();if(!sup)supMode=false;$('supview').hidden=!sup;$('supview').textContent=supMode?'← Normal view':'👁 Handovers view';document.querySelectorAll('.supx').forEach(el=>el.hidden=!sup);$('plannercard').hidden=$('form').hidden=$('rosterbox').hidden=supMode;const pending=data.filter(h=>h.to===me&&!h.ack);$('pending').innerHTML=pending.length?'<div class="card"><h2>⚠ Handovers waiting for '+esc(me)+'</h2>'+pending.map(entry).join('')+'</div>':'';$('history').innerHTML=data.length?data.map(entry).join(''):'<p>No handovers yet.</p>';renderTasks();renderRoster();renderEtas();renderWarranties();$('onshift').textContent=ss.on.length?'👤 '+ss.on.map(c=>c.user).join(', '):'';$('signoff').hidden=!ss.on.length;$('signon').hidden=!!ss.on.length;const stale=ss.on.filter(c=>c.shiftKey!==here());$('banner').innerHTML=stale.length?'<div class="card"><h2>⏰ Shift change</h2><p>'+esc(stale.map(c=>c.user).join(', '))+' still signed on from an earlier shift.</p><button id="bsign">Sign on for '+esc(here())+'</button></div>':'';$('now').textContent=currentShift()+' shift • '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
-$('supview').onclick=()=>{supMode=!supMode;setPage('home');render()};
-$('form').onsubmit=e=>{e.preventDefault();if($('from').value===$('to').value&&!confirm('Handing over to yourself – continue?'))return;const chk=[...document.querySelectorAll('.chk')];const h={id:Date.now(),created:new Date().toISOString(),from:$('from').value,to:$('to').value,shift:$('shift').value,date:$('date').value,open:tasks.filter(t=>!t.done).map(t=>(t.type==='order'?'ORDER: ':'')+t.text),completedTasks:tasks.filter(t=>t.done&&t.doneShift===here()).map(t=>t.text),specialOrders:etas.filter(x=>!x.delivered).map(x=>x.part+' – ETA '+x.eta),checks:chk.filter(x=>x.checked).length+'/'+chk.length,ack:null};['inprog','done','parts','equip','safety','notes'].forEach(k=>h[k]=$(k).value);data.unshift(h);save();pushH(h);$('form').reset();render();window.scrollTo(0,0)};
-$('export').onclick=()=>{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.href=url;a.download='handovers.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
-$('clear').onclick=()=>{if(confirm('Delete ALL handovers?')){data.forEach(h=>pushDel('handover:'+h.id,'handover'));data=[];save();render()}};
-document.addEventListener('click',e=>{const t=e.target.closest('[data-page],[data-ttab],[data-ack],[data-del],[data-copy],[data-twork],[data-tdel],[data-edel],[data-wedit],[data-wdel],#bsign');if(!t)return;const d=t.dataset;if(d.page){setPage(d.page);return}if(d.ttab){ttab=d.ttab;renderTasks();return}if(t.id==='bsign'){openLock(false);return}if(d.wedit){editW(d.wedit);return}if(d.wdel){if(!confirm('Delete this warranty?'))return;warranties=warranties.filter(w=>String(w.id)!==d.wdel);wsave();pushDel('warranty:'+d.wdel,'warranty');renderWarranties();return}if(d.ack){const h=data.find(x=>String(x.id)===d.ack);if(!h)return;h.ack={by:$('from').value,at:new Date().toISOString()};save();pushH(h);render();return}if(d.del){if(!confirm('Delete this handover?'))return;data=data.filter(h=>String(h.id)!==d.del);save();pushDel('handover:'+d.del,'handover');render();return}if(d.copy){const h=data.find(x=>String(x.id)===d.copy);if(h)navigator.clipboard.writeText(h.shift+' shift '+h.date+': '+h.from+' → '+h.to+'\n'+['inprog','done','parts','equip','safety','notes'].map(k=>k+': '+(h[k]||'')).join('\n')).then(()=>alert('Copied')).catch(()=>alert('Clipboard unavailable'));return}if(d.twork){const x=tasks.find(x=>String(x.id)===d.twork);if(!x)return;const me=$('from').value;if(x.workingBy===me)x.workingBy=null;else{if(x.workingBy&&!confirm(x.workingBy+' is already on this – take over?'))return;x.workingBy=me}tsave();pushT(x);render();return}if(d.tdel){tasks=tasks.filter(x=>String(x.id)!==d.tdel);tsave();pushDel('task:'+d.tdel,'task');render();return}if(d.edel){if(!confirm('Remove this special order?'))return;etas=etas.filter(x=>String(x.id)!==d.edel);esave();pushDel('eta:'+d.edel,'eta');renderEtas()}});
-document.addEventListener('change',e=>{const d=e.target.dataset;if(d.tick){const t=tasks.find(x=>String(x.id)===d.tick);if(!t)return;t.done=e.target.checked;t.doneBy=t.done?$('from').value:null;t.doneShift=t.done?here():null;t.doneAt=t.done?Date.now():null;if(t.done)t.workingBy=null;tsave();pushT(t);render()}if(d.edone){const x=etas.find(x=>String(x.id)===d.edone);if(!x)return;if(e.target.checked){x.delivered=fmtD(new Date());x.deliveredBy=$('from').value}else{delete x.delivered;delete x.deliveredBy}esave();pushE(x);renderEtas()}if(d.eupd){const x=etas.find(x=>String(x.id)===d.eupd);if(x&&e.target.value){x.eta=e.target.value;esave();pushE(x);renderEtas()}}});
-document.addEventListener('input',e=>{if(e.target.tagName==='TEXTAREA'){e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+2+'px'}});
-$('form').addEventListener('focusin',e=>{if(e.target.tagName==='TEXTAREA'&&!e.target.value)e.target.value='• '});$('form').addEventListener('focusout',e=>{if(e.target.tagName==='TEXTAREA'&&!e.target.value.replace(/[•\s]/g,''))e.target.value=''});$('form').addEventListener('keydown',e=>{if(e.target.tagName==='TEXTAREA'&&e.key==='Enter'){e.preventDefault();e.target.setRangeText('\n• ',e.target.selectionStart,e.target.selectionEnd,'end')}});
-// ---- Supabase: same project and handover_sync table as existing app ----
-const sb=window.supabase?supabase.createClient('https://botdhowoytwczstqrjom.supabase.co','sb_publishable_FQkw8ntiw0IT-XynvcIaJg_4wv3l5tO'):null;
-let sbUser=null,parts=null,scanner=null,lastScan={c:'',t:0};const PT='https://9h2c8tksrk-lgtm.github.io/Parts-tracker/';
-const PTCRED='pt.cred.v1';function sbStatus(){$('sbstat').textContent=!sb?'Parts Tracker unavailable':sbUser?'🔩 Connected: '+sbUser.email:'Not signed in to Parts Tracker';$('sbform').hidden=!sb||!!sbUser}
-async function ptAutoSignIn(){if(!sb||sbUser||!navigator.onLine)return;const c=get(PTCRED,null);if(!c)return;const {error}=await sb.auth.signInWithPassword({email:c.email,password:c.password});if(error&&/credentials/i.test(error.message))localStorage.removeItem(PTCRED)}
-if(sb){sb.auth.getSession().then(({data})=>{sbUser=data.session?.user||null;sbStatus();if(!sbUser)ptAutoSignIn()});sb.auth.onAuthStateChange((_,se)=>{sbUser=se?.user||null;sbStatus()})}
-$('sbform').onsubmit=async e=>{e.preventDefault();if(!sb)return;const email=$('sbemail').value.trim(),password=$('sbpass').value;const {error}=await sb.auth.signInWithPassword({email,password});$('sbpass').value='';if(!error)put(PTCRED,{email,password});$('scanmsg').textContent=error?'Sign-in failed: '+error.message:'Signed in'};
-async function loadParts(){if(parts)return parts;try{const r=await fetch(PT+'master_parts_list.json');if(!r.ok)throw Error('Unavailable');parts=await r.json();put('parts.cache',parts)}catch{parts=get('parts.cache',[])}return parts}
-async function findPart(code){if(sb&&sbUser){try{let {data}=await sb.from('parts').select('barcode,part_name,description,stock_level').eq('barcode',code).maybeSingle();if(!data){const a=await sb.from('part_barcodes').select('barcode').eq('alias',code).maybeSingle();if(a.data)data=(await sb.from('parts').select('barcode,part_name,description,stock_level').eq('barcode',a.data.barcode).maybeSingle()).data}if(data)return data}catch{}}const m=(parts||[]).find(x=>String(x.Barcode).toLowerCase()===code.toLowerCase());return m?{barcode:m.Barcode,part_name:m.PartName,description:m.Description,stock_level:m.StockLevel}:null}
-async function addOrder(raw){const code=raw.trim();if(!code)return;const p=await findPart(code),key=p?p.barcode:code,ex=tasks.find(t=>!t.done&&t.type==='order'&&t.code===key);if(ex){ex.qty=(ex.qty||1)+1;pushT(ex)}else{const t={id:Date.now(),type:'order',code:key,qty:1,by:$('from').value,shiftKey:here(),done:false,text:p?p.part_name+' ('+key+')':'Unknown part ('+code+')'};tasks.push(t);pushT(t)}tsave();render();$('scanmsg').textContent=p?'✔ '+p.part_name:'⚠ Not found: '+code}
-$('tscan').onclick=async()=>{await loadParts();sbStatus();$('scanbox').style.display='flex';if(!window.Html5Qrcode){$('scanmsg').textContent='Scanner unavailable. Type the code below.';return}scanner=new Html5Qrcode('reader');scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:150}},c=>{if(c===lastScan.c&&Date.now()-lastScan.t<3000)return;lastScan={c,t:Date.now()};addOrder(c)}).catch(e=>$('scanmsg').textContent='Camera unavailable: '+e)};
-$('manualadd').onclick=()=>{addOrder($('manual').value);$('manual').value=''};$('scandone').onclick=()=>{$('scanbox').style.display='none';if(scanner){scanner.stop().then(()=>scanner.clear()).catch(()=>{});scanner=null}};
-// ---- Sign on / off ----
-async function hash(pin){const t='handover:'+pin;if(crypto?.subtle){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}let h=5381;for(const c of t)h=(h*33)^c.charCodeAt(0);return 'd'+(h>>>0)}
-let lockOff=false;function fillSu(names){const v=$('su').value;$('su').replaceChildren(...names.map(n=>new Option(n,n)));if(names.includes(v))$('su').value=v}
-function openLock(off=false){lockOff=off;fillSu(off?ss.on.map(c=>c.user):USERS);if(!off)$('su').value=whoOn(parseD(shiftDate()),currentShift());showLock()}
-function showLock(){$('locktitle').textContent=lockOff?'Sign off shift':'Sign on to shift';$('locksub').textContent=lockOff?'Sign off':'Sign on';$('lockinfo').textContent=ss.on.length?'On shift: '+ss.on.map(c=>c.user).join(', '):'Nobody signed on';$('spin').value=$('spin2').value='';$('lockerr').textContent='';$('newpin').hidden=lockOff||!!pins[$('su').value];$('lockcancel').hidden=!ss.on.length;$('lock').style.display='flex';$('spin').focus()}
-$('su').onchange=showLock;$('signon').onclick=()=>openLock();$('signoff').onclick=()=>openLock(true);$('lockcancel').onclick=()=>{if(ss.on.length)$('lock').style.display='none'};
-$('lockform').onsubmit=async e=>{e.preventDefault();const u=$('su').value,pin=$('spin').value,err=m=>$('lockerr').textContent=m;if(!/^\d{4,6}$/.test(pin))return err('PIN must be 4–6 digits');if(!pins[u]&&sb&&navigator.onLine){try{const {data:pr}=await sb.from('handover_sync').select('value').eq('id','pin:'+u).maybeSingle();if(pr?.value?.hash){pins[u]=pr.value.hash;put('pins.v1',pins)}}catch{}}const hp=await hash(pin);if(lockOff){const c=ss.on.find(x=>x.user===u);if(!c)return err('Not signed on');if(pins[u]!==hp)return err('Wrong PIN');if(!data.some(h=>h.from===u&&h.created>=c.at)&&!confirm('No handover submitted this shift. Sign off anyway?'))return;c.off=new Date().toISOString();ss.log.push(c);ss.on=ss.on.filter(x=>x!==c);ssave();pushShift();render();if(ss.on.length)$('lock').style.display='none';else openLock();return}if(!pins[u]){if(pin!==$('spin2').value)return err('PINs do not match');pins[u]=hp;put('pins.v1',pins);pushPin(u)}else if(pins[u]!==hp)return err('Wrong PIN');const rost=whoOn(parseD(shiftDate()),currentShift());if(rost!==u&&!ss.on.some(c=>c.user===rost)&&!confirm(rost+' is rostered on this shift, not '+u+'. Covering?'))return;if(!ss.on.some(c=>c.user===u))ss.on.push({user:u,at:new Date().toISOString(),shiftKey:here()});ssave();pushShift();$('lock').style.display='none';defaults();render();ptAutoSignIn()};
-// ---- Cross-device sync (handover_sync) ----
-const SOUT='sync.out.v1',SLAST='sync.last.v1';let out=get(SOUT,[]),lastSync=localStorage.getItem(SLAST)||'',flushing=false,pullOk=null,applying=false;const osave=()=>put(SOUT,out);
-function syncUI(){$('sync').textContent=out.length?'⇡ '+out.length+' to sync':pullOk===false?'⚠ sync offline':pullOk?'☁ synced':''}
-function qpush(id,kind,value){if(applying)return;out=out.filter(o=>o.id!==id);out.push({id,kind,value});osave();syncUI();flush()}
-const pushH=h=>qpush('handover:'+h.id,'handover',h),pushT=t=>qpush('task:'+t.id,'task',t),pushE=x=>qpush('eta:'+x.id,'eta',x),pushW=w=>qpush('warranty:'+w.id,'warranty',w),pushDel=(id,kind)=>qpush(id,kind,{deleted:true}),pushPin=u=>qpush('pin:'+u,'pin',{hash:pins[u]}),pushShift=()=>qpush('shift:current','shift',{on:ss.on});
-async function flush(){if(!sb||flushing||!out.length||!navigator.onLine)return;flushing=true;try{while(out.length){const batch=out.slice(0,50);const {error}=await sb.from('handover_sync').upsert(batch.map(o=>({id:o.id,kind:o.kind,value:o.value})));if(error){pullOk=false;console.warn('Sync upload:',error.message);break}const sent=new Set(batch.map(x=>x.id));out=out.filter(x=>!sent.has(x.id));osave()}}catch(e){pullOk=false;console.warn(e)}finally{flushing=false;syncUI()}}
-function applyRow(r){const v=r.value||{},id=r.id.split(':').slice(1).join(':');if(r.kind==='handover'){data=data.filter(x=>String(x.id)!==id);if(!v.deleted)data.push(v);data.sort((a,b)=>b.id-a.id)}else if(r.kind==='task'){tasks=tasks.filter(x=>String(x.id)!==id);if(!v.deleted)tasks.push(v);else if(!rseen.includes(+id)){rseen.push(+id);put('recur.seen.v1',rseen)}}else if(r.kind==='eta'){etas=etas.filter(x=>String(x.id)!==id);if(!v.deleted)etas.push(v)}else if(r.kind==='warranty'){warranties=warranties.filter(x=>String(x.id)!==id);if(!v.deleted)warranties.push(v)}else if(r.kind==='pin'){if(v.hash)pins[id]=v.hash}else if(r.kind==='shift')ss.on=Array.isArray(v.on)?v.on:v.cur?[v.cur]:[]}
-async function pull(){if(!sb||!navigator.onLine){syncUI();return}const first=!lastSync;let q=sb.from('handover_sync').select('id,kind,value,updated_at').order('updated_at',{ascending:true}).limit(1000);if(lastSync)q=q.gt('updated_at',lastSync);let rows,error;try{({data:rows,error}=await q)}catch(e){error=e}if(error){pullOk=false;syncUI();return}pullOk=true;const pend=new Set(out.map(o=>o.id)),seen=new Set(),prevCur=JSON.stringify(ss.on);applying=true;for(const r of rows||[]){seen.add(r.id);lastSync=r.updated_at;if(!pend.has(r.id))applyRow(r)}applying=false;if(!lastSync)lastSync='1970-01-01T00:00:00+00:00';localStorage.setItem(SLAST,lastSync);if(first){data.forEach(h=>{if(!seen.has('handover:'+h.id))pushH(h)});tasks.forEach(t=>{if(!seen.has('task:'+t.id))pushT(t)});etas.forEach(x=>{if(!seen.has('eta:'+x.id))pushE(x)});warranties.forEach(w=>{if(!seen.has('warranty:'+w.id))pushW(w)});Object.keys(pins).forEach(u=>{if(!seen.has('pin:'+u))pushPin(u)});if(ss.on.length&&!seen.has('shift:current'))pushShift()}if(rows?.length){save();tsave();esave();wsave();ssave();put('pins.v1',pins);if(JSON.stringify(ss.on)!==prevCur){if(!ss.on.length&&$('lock').style.display!=='flex')openLock();else if($('lock').style.display==='flex')openLock(lockOff&&!!ss.on.length)}render()}flush();syncUI()}
-window.addEventListener('online',()=>{flush();pull()});document.addEventListener('visibilitychange',()=>{if(!document.hidden)pull()});setInterval(pull,20000);
-// ---- Lightning (informational feed; never replaces official site warnings) ----
-const LX={lat:-21.9662,lon:120.1201,watch:20,danger:5};let lxWs=null,lxOk=false,lxSrv=0,lxStrikes=[],lxFc=null,lxAlertOn=false,lxCtx=null;
-const lxDist=(la,lo)=>{const p=Math.PI/180,a=Math.sin((la-LX.lat)*p/2)**2+Math.cos(la*p)*Math.cos(LX.lat*p)*Math.sin((lo-LX.lon)*p/2)**2;return 12742*Math.asin(Math.sqrt(a))};
-function lxDecode(b){const e={},d=(b+'').split(''),g=[d[0]];let c=d[0],f=c,o=256;for(let i=1;i<d.length;i++){let a=d[i].charCodeAt(0);a=a<256?d[i]:e[a]||f+c;g.push(a);c=a.charAt(0);e[o++]=f+c;f=a}return g.join('')}
-function lxConnect(){if(lxWs||!navigator.onLine)return;try{lxWs=new WebSocket(['wss://ws1.blitzortung.org/','wss://ws7.blitzortung.org/','wss://ws8.blitzortung.org/'][lxSrv%3])}catch{lxSrv++;return}lxWs.onopen=()=>{lxOk=true;lxWs.send('{"a":111}');renderLx()};lxWs.onmessage=m=>{try{const s=JSON.parse(lxDecode(m.data));if(typeof s.lat!=='number'||Math.abs(s.lat-LX.lat)>.3||Math.abs(s.lon-LX.lon)>.3)return;const d=lxDist(s.lat,s.lon);if(d<=LX.watch){lxStrikes.push({t:Date.now(),d});renderLx()}}catch{}};lxWs.onclose=lxWs.onerror=()=>{if(!lxWs)return;lxWs=null;lxOk=false;lxSrv++;renderLx();setTimeout(lxConnect,30000)}}
-function lxSiren(){try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;lxCtx=lxCtx||new AC();lxCtx.resume();const t=lxCtx.currentTime,o=lxCtx.createOscillator(),g=lxCtx.createGain();o.type='sawtooth';o.connect(g);g.connect(lxCtx.destination);g.gain.setValueAtTime(.4,t);for(let i=0;i<4;i++){o.frequency.setValueAtTime(600,t+i);o.frequency.linearRampToValueAtTime(1200,t+i+.5);o.frequency.linearRampToValueAtTime(600,t+i+1)}g.gain.linearRampToValueAtTime(0,t+4.2);o.start(t);o.stop(t+4.2)}catch{}}
-function lxRedAlert(){lxSiren();setTimeout(()=>{if('speechSynthesis'in window){const u=new SpeechSynthesisUtterance('Red Alert Active');speechSynthesis.speak(u)}},4300);if('Notification'in window&&Notification.permission==='granted')new Notification('⛔ RED ALERT – Lightning',{body:'Lightning within 5 km of Golden Eagle site',tag:'lx-red'})}
-document.addEventListener('pointerdown',()=>{if('Notification'in window&&Notification.permission==='default')Notification.requestPermission().catch(()=>{});try{lxCtx=lxCtx||new (window.AudioContext||window.webkitAudioContext)();lxCtx.resume()}catch{}},{once:true});setInterval(()=>{if(lxAlertOn)lxRedAlert()},120000);
-async function lxForecast(){if(!navigator.onLine)return;try{const r=await fetch('https://api.open-meteo.com/v1/forecast?latitude='+LX.lat+'&longitude='+LX.lon+'&hourly=weather_code&forecast_hours=12&timezone=auto'),j=await r.json(),i=j.hourly.weather_code.findIndex(c=>[95,96,99].includes(c));lxFc=i>=0?j.hourly.time[i]:null}catch{lxFc=null}renderLx()}
-function renderLx(){const now=Date.now();lxStrikes=lxStrikes.filter(s=>now-s.t<30*60000);const danger=lxStrikes.filter(s=>s.d<=LX.danger);if(danger.length&&!lxAlertOn){lxAlertOn=true;lxRedAlert()}else if(!danger.length)lxAlertOn=false;const hit=danger.length?danger:lxStrikes;const card=$('lxcard');card.className='card '+(danger.length?'lx-danger':hit.length?'lx-watch':'');let text=hit.length?(danger.length?'⛔ DANGER':'⚠ Lightning nearby')+' • nearest '+Math.min(...hit.map(s=>s.d)).toFixed(1)+' km • '+hit.length+' strikes in 30 min':'✅ No strikes detected within 20 km in the last 30 min';if(lxFc)text+='\n🌩 Thunderstorm forecast '+new Date(lxFc).toLocaleString();text+='\n'+(lxOk?'Live feed connected':'⚠ Live feed offline – do not rely on this display for safety decisions');$('lxbody').textContent=text;$('lxbody').style.whiteSpace='pre-wrap'}
-lxConnect();lxForecast();setInterval(renderLx,60000);setInterval(lxForecast,900000);window.addEventListener('online',lxConnect);
-// ---- Start ----
-resetW();defaults();render();pull();flush();syncUI();setInterval(render,60000);if(!ss.on.length)openLock();
-</script></body></html>
+function pos(n,d){const k=Math.round((d-REF)/864e5);return (((k+OFFSET[n])%21)+21)%21}
+function status(n,d){const p=pos(n,d);return p<7?"D":p<14?"N":"O"}
+function whoOn(d,sh){return CREW.find(n=>status(n,d)===(sh==="Day"?"D":"N"))}
+function setTo(){ // default: whoever is rostered on the next shift
+  const d=parseD($("date").value),sh=$("shift").value;
+  $("to").value=sh==="Day"?whoOn(d,"Night"):whoOn(addDays(d,1),"Day")}
+const NOTE={0:"first day shift",6:"last day shift",7:"first night shift",13:"last night shift – then 7 days off"};
+function renderRoster(){
+  const t=parseD(shiftDate()),sh=currentShift();
+  $("rtoday").textContent=`— now: Day ${whoOn(t,"Day")}, Night ${whoOn(t,"Night")}`;
+  let h="<table class='r'><tr><th>Date</th>"+CREW.map(n=>`<th>${n}</th>`).join("")+"</tr>";
+  for(let i=-1;i<21;i++){const d=addDays(t,i);
+    h+=`<tr class="${i===0?"today":""}"><th>${d.toLocaleDateString([],{weekday:"short",day:"numeric",month:"short"})}</th>`+
+      CREW.map(n=>{const st=status(n,d),p=pos(n,d);
+        return `<td class="${st}">${{D:"Day",N:"Night",O:"Off"}[st]}${NOTE[p]?`<br><small>${NOTE[p]}</small>`:""}</td>`}).join("")+"</tr>"}
+  $("roster").innerHTML=h+"</table>"}
+$("from").disabled=true;
+$("shift").onchange=$("date").onchange=setTo;
+$("form").addEventListener("reset",()=>setTimeout(defaults));
+
+$("form").onsubmit=e=>{
+  e.preventDefault();
+  if($("from").value===$("to").value&&!confirm("Handing over to yourself – continue?"))return;
+  document.querySelectorAll("#form textarea").forEach(t=>{if(!t.value.replace(/[•\s]/g,""))t.value=""});
+  const chk=[...document.querySelectorAll(".chk")];
+  const h={id:Date.now(),created:new Date().toISOString(),from:$("from").value,to:$("to").value,
+    shift:$("shift").value,date:$("date").value,inprog:$("inprog").value,done:$("done").value,
+    parts:$("parts").value,equip:$("equip").value,safety:$("safety").value,notes:$("notes").value,
+    open:tasks.filter(t=>!t.done).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")
+      +(t.assignTo||t.assignShift?" [for "+(t.assignTo||"anyone")+(t.assignShift?" – "+t.assignShift:"")+"]":"")
+      +(t.workingBy?" [in progress – "+t.workingBy+"]":"")),
+    completedTasks:tasks.filter(t=>t.done&&t.doneShift===here()).map(t=>(t.type==="order"?"ORDER: ":"")+t.text+(t.qty>1?" ×"+t.qty:"")+(t.doneBy?" (done by "+t.doneBy+")":"")),
+    specialOrders:etas.filter(x=>!x.delivered).map(x=>{
+      const ref=[x.asset&&"Asset "+x.asset,x.wo&&"WO "+x.wo].filter(Boolean).join(" • ");
+      const eta=parseD(x.eta).toLocaleDateString([],{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+      return x.part+(x.desc?" — "+x.desc:"")+(ref?" ("+ref+")":"")+" – ETA "+eta+(x.eta<fmtD(new Date())?" OVERDUE":"")}),
+    checks:chk.filter(c=>c.checked).length+"/"+chk.length,ack:null};
+  data.unshift(h);
+  save();pushH(h);$("form").reset();render();window.scrollTo(0,0);
+};
+
+const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+function body(h){
+  const f=[["Jobs in progress","inprog"],["Completed","done"],["Parts / stock","parts"],["Equipment","equip"],["Safety","safety"],["Notes","notes"]];
+  return f.map(([t,k])=>{
+    let v=h[k].trim();
+    if(k==="done"&&h.completedTasks&&h.completedTasks.length)
+      v=(v?v+"\n":"")+h.completedTasks.map(x=>"✔ "+x).join("\n");
+    return v?`<b class="${k==="safety"?"flag":""}">${t}</b><pre>${esc(v)}</pre>`:""}).join("")
+    +(h.open&&h.open.length?`<b>Rolled over (not done)</b><pre>${esc(h.open.map(x=>"• "+x).join("\n"))}</pre>`:"")
+    +(h.specialOrders&&h.specialOrders.length?`<b>📦 Special order parts not yet delivered</b><pre>${esc(h.specialOrders.map(x=>"• "+x).join("\n"))}</pre>`:"")
+    +`<small>Checklist ${h.checks}</small>`;
+}
+function entry(h){
+  const d=new Date(h.created).toLocaleString();
+  return `<div class="entry ${h.shift.toLowerCase()}"><b>${h.shift} shift ${h.date}</b> — ${h.from} → ${h.to}<br><small>${d}</small>
+  ${body(h)}<div class="actions">
+  ${h.ack?`<span class="ack">✔ Acknowledged by ${h.ack.by} ${new Date(h.ack.at).toLocaleString()}</span>`
+    :`<button data-ack="${h.id}" ${h.to!==$("from").value?"disabled":""}>I've read this (${h.to})</button>`}
+  <button class="sec" data-copy="${h.id}">Copy</button><button class="sec" data-del="${h.id}">Delete</button></div></div>`;
+}
+function render(){
+  spawnRecurring();
+  const me=$("from").value, sup=isSup();
+  if(!sup)supMode=false;
+  // supervisor controls + handovers-only view
+  $("supview").style.display=sup?"":"none";
+  $("supview").textContent=supMode?"← Normal view":"👁 Handovers view";
+  document.querySelectorAll(".supx").forEach(el=>el.style.display=sup?"":"none");
+  $("plannercard").style.display=supMode?"none":"";
+  $("form").style.display=supMode?"none":"";
+  $("rosterbox").style.display=supMode?"none":"";
+  const p=data.filter(h=>h.to===me&&!h.ack);
+  $("pending").innerHTML=p.length?`<div class="card"><h2>⚠ Handovers waiting for ${me} (${p.length})</h2>${p.map(entry).join("")}</div>`:"";
+  $("history").innerHTML=data.length?data.map(entry).join(""):"<p>No handovers yet.</p>";
+  renderTasks();renderRoster();renderEtas();
+  $("onshift").textContent=ss.on.length?"👤 "+ss.on.map(c=>c.user+" "+new Date(c.at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})).join(", "):"";
+  $("signoff").style.display=ss.on.length?"":"none";
+  $("signon").style.display=ss.on.length?"":"none";
+  const stale=ss.on.filter(c=>c.shiftKey!==here());
+  $("banner").innerHTML=stale.length?`<div class="card"><h2 style="color:#fff">⏰ Shift change – ${stale.map(c=>c.user).join(", ")} ${stale.length>1?"are":"is"} still signed on from ${stale[0].shiftKey}</h2><p>Finish the handover and sign off, then the incoming person signs on.</p><button id="bsign">Sign on for ${here()}</button></div>`:"";
+  $("now").textContent=currentShift()+" shift • "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+}
+const here=()=>currentShift()+" "+shiftDate();
+$("supview").onclick=()=>{supMode=!supMode;render();window.scrollTo(0,0)};
+// ---- recurring weekly tasks (dow: 0=Sun..6=Sat) ----
+const RECUR=[
+  {dow:1,shift:"Day",text:"Check with Stores Port Hedland that cages will be returned to suppliers"},
+  {dow:3,shift:"Night",text:"Stock count – McPhee ROM"},
+  {dow:3,shift:"Day",text:"Follow up open purchase orders with suppliers"},
+  {dow:4,shift:"Day",text:"Check if waste oil IBCs have been organised"},
+  {dow:2,shift:"Day",text:"Tyre orders – check if placed"},
+  {dow:2,shift:"Night",text:"Check oils and lubricants"},
+  {dow:4,shift:"Night",text:"Check sundries and re-order"},
+];
+const RSEEN="recur.seen.v1";
+let rseen=JSON.parse(localStorage.getItem(RSEEN)||"[]").filter(id=>Date.now()-id<30*864e5);
+function spawnRecurring(){
+  const date=shiftDate(),sh=currentShift(),dow=parseD(date).getDay();
+  let added=false;
+  RECUR.forEach((r,i)=>{
+    if(r.dow!==dow||r.shift!==sh)return;
+    const id=parseD(date).getTime()+5*36e5+i; // deterministic per occurrence so devices don't duplicate
+    if(rseen.includes(id)||tasks.some(t=>t.id===id))return;
+    const t={id,type:"task",recur:true,text:r.text,by:"Recurring",shiftKey:here(),done:false};
+    tasks.push(t);pushT(t);rseen.push(id);added=true});
+  if(added){tasks.sort((a,b)=>a.id-b.id);tsave();localStorage.setItem(RSEEN,JSON.stringify(rseen))}}
+let ttab="open";
+function renderTasks(){
+  const cur=here();
+  const open=tasks.filter(t=>!t.done), done=tasks.filter(t=>t.done).sort((a,b)=>(b.doneAt||b.id)-(a.doneAt||a.id));
+  $("tabopen").textContent=`📋 To do (${open.length})`;
+  $("tabdone").textContent=`✅ Completed (${done.length})`;
+  document.querySelectorAll("[data-ttab]").forEach(b=>b.classList.toggle("active",b.dataset.ttab===ttab));
+  $("tactions").style.display=ttab==="open"?"":"none";
+  $("tform").style.display=ttab==="open"?"":"none";
+  const row=t=>{const roll=!t.done&&t.shiftKey!==cur;
+    return `<div class="task ${t.done?"done":""}"><input type="checkbox" data-tick="${t.id}" ${t.done?"checked":""}>
+    <div><span><span class="tag ${t.type}">${t.type==="order"?"ORDER":"TASK"}</span>${t.recur?'<span class="tag recur">🔁 WEEKLY</span>':""}${t.assignTo||t.assignShift?`<span class="tag assign">👤 ${esc(t.assignTo||"Anyone")}${t.assignShift?" • "+t.assignShift:""}</span>`:""}${!t.done&&t.workingBy?`<span class="tag work">🔧 ${esc(t.workingBy)} on it</span>`:""}${roll?'<span class="tag roll">ROLLED OVER</span>':""}${esc(t.text)}${t.qty>1?" ×"+t.qty:""}</span>
+    <small class="m">Added by ${t.by} – ${t.shiftKey}${t.done?` • done by ${t.doneBy}${t.doneShift?" – "+t.doneShift:""}`:""}</small></div>
+    ${t.done?"":`<button type="button" class="sec" data-twork="${t.id}">${t.workingBy?"✋ Stop":"🔧 I'm on it"}</button>`}
+    <button class="sec" data-tdel="${t.id}">✕</button></div>`};
+  if(ttab==="done"){
+    $("tasks").innerHTML=done.length?
+      `<small>✅ Ticked off – untick anything done by mistake to send it back to the to-do list. Kept for 30 days.</small>`+done.map(row).join("")
+      :"<p>Nothing ticked off yet.</p>";
+    return}
+  const ord=open.filter(t=>t.type==="order"), tsk=open.filter(t=>t.type!=="order");
+  $("tasks").innerHTML=open.length?
+    (tsk.length?`<small>📋 Tasks</small>`+tsk.map(row).join(""):"")+
+    (ord.length?`<small>🔩 Orders</small>`+ord.map(row).join(""):"")
+    :"<p>Nothing outstanding 🎉</p>";
+}
+$("tform").onsubmit=e=>{e.preventDefault();
+  const t={id:Date.now(),text:$("ttext").value.trim(),type:$("ttype").value,by:$("from").value,shiftKey:here(),done:false};
+  if(isSup()){
+    if($("tassign").value)t.assignTo=$("tassign").value;
+    if($("tshift").value)t.assignShift=$("tshift").value;
+  }
+  tasks.push(t);
+  tsave();pushT(t);$("ttext").value="";$("tassign").value="";$("tshift").value="";render()};
+document.addEventListener("click",e=>{
+  if(e.target.dataset.ttab){ttab=e.target.dataset.ttab;renderTasks();return}
+  if(e.target.dataset.twork){const t=tasks.find(x=>x.id==e.target.dataset.twork);if(!t)return;
+    const me=$("from").value;
+    if(t.workingBy===me)t.workingBy=null;
+    else{if(t.workingBy&&!confirm(t.workingBy+" is already on this – take over?"))return;t.workingBy=me}
+    tsave();pushT(t);render();return}
+  if(e.target.dataset.tdel){const id=e.target.dataset.tdel;
+    tasks=tasks.filter(x=>x.id!=id);tsave();pushDel("task:"+id,"task");render();return}
+  const t=e.target.dataset;
+  if(t.ack){const h=data.find(x=>x.id==t.ack);h.ack={by:$("from").value,at:new Date().toISOString()};save();pushH(h);render()}
+  if(t.del&&confirm("Delete this handover?")){data=data.filter(x=>x.id!=t.del);save();pushDel("handover:"+t.del,"handover");render()}
+  if(t.copy){const h=data.find(x=>x.id==t.copy);
+    const txt=`${h.shift} shift ${h.date}: ${h.from} -> ${h.to}\n`+[["In progress","inprog"],["Completed","done"],["Parts","parts"],["Equipment","equip"],["Safety","safety"],["Notes","notes"]]
+      .map(([a,k])=>{let v=h[k].trim();
+        if(k==="done"&&h.completedTasks&&h.completedTasks.length)
+          v=(v?v+"\n":"")+h.completedTasks.map(x=>"- "+x).join("\n");
+        return v?`${a}: ${v}`:""}).filter(Boolean).join("\n")
+      +(h.specialOrders&&h.specialOrders.length?"\nSpecial order parts not delivered:\n"+h.specialOrders.map(x=>"- "+x).join("\n"):"");
+    navigator.clipboard.writeText(txt).then(()=>alert("Copied"))}
+});
+document.addEventListener("change",e=>{const id=e.target.dataset.tick;if(!id)return;
+  const t=tasks.find(x=>x.id==id);t.done=e.target.checked;
+  t.doneBy=t.done?$("from").value:null;t.doneShift=t.done?here():null;
+  t.doneAt=t.done?Date.now():null;
+  if(t.done)t.workingBy=null;
+  const old=tasks.filter(x=>x.done&&Date.now()-(x.doneAt||x.id)>=30*864e5);
+  tasks=tasks.filter(x=>!x.done||Date.now()-(x.doneAt||x.id)<30*864e5);
+  tsave();pushT(t);old.forEach(x=>pushDel("task:"+x.id,"task"));render()});
+$("export").onclick=()=>{const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));
+  a.download="handovers.json";a.click()};
+$("clear").onclick=()=>{if(confirm("Delete ALL handovers?")){data.forEach(h=>pushDel("handover:"+h.id,"handover"));data=[];save();render()}};
+// ---- auto-grow textareas ----
+const grow=t=>{t.style.height="auto";t.style.height=t.scrollHeight+2+"px"};
+document.addEventListener("input",e=>{if(e.target.tagName==="TEXTAREA")grow(e.target)});
+$("form").addEventListener("reset",()=>setTimeout(()=>document.querySelectorAll("textarea").forEach(grow)));
+// ---- dot points in handover textareas ----
+$("form").addEventListener("focusin",e=>{const t=e.target;
+  if(t.tagName==="TEXTAREA"&&!t.value){t.value="• ";grow(t)}});
+$("form").addEventListener("focusout",e=>{const t=e.target;
+  if(t.tagName==="TEXTAREA"&&!t.value.replace(/[•\s]/g,"")){t.value="";grow(t)}});
+$("form").addEventListener("keydown",e=>{const t=e.target;
+  if(t.tagName!=="TEXTAREA"||e.key!=="Enter")return;
+  e.preventDefault();
+  t.setRangeText("\n• ",t.selectionStart,t.selectionEnd,"end");grow(t)});
+// ---- barcode scan to order ----
+const PT="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/";
+let parts=null,scanner=null,lastScan={c:"",t:0};
+async function loadParts(){
+  if(parts)return parts;
+  try{parts=await(await fetch(PT+"master_parts_list.json")).json();localStorage.setItem("parts.cache",JSON.stringify(parts))}
+  catch{parts=JSON.parse(localStorage.getItem("parts.cache")||"[]")}
+  return parts}
+const sb=window.supabase?supabase.createClient("https://botdhowoytwczstqrjom.supabase.co","sb_publishable_FQkw8ntiw0IT-XynvcIaJg_4wv3l5tO"):null;
+let sbUser=null;
+function sbStatus(){
+  $("sbstat").textContent=!sb?"Parts Tracker unavailable offline – using basic parts list.":sbUser?"🔩 Parts Tracker connected: "+sbUser.email:"Not signed in to Parts Tracker – using basic parts list.";
+  $("sbform").style.display=sb&&!sbUser?"block":"none"}
+if(sb){sb.auth.getSession().then(({data})=>{sbUser=data.session?data.session.user:null;sbStatus();if(!sbUser)ptAutoSignIn()});
+  sb.auth.onAuthStateChange((_,se)=>{sbUser=se?se.user:null;sbStatus()})}
+// Remember Parts Tracker credentials on this device so signing on to shift also signs into Parts Tracker
+const PTCRED="pt.cred.v1";
+async function ptAutoSignIn(){
+  if(!sb||sbUser||!navigator.onLine)return;
+  const c=JSON.parse(localStorage.getItem(PTCRED)||"null");if(!c)return;
+  const {error}=await sb.auth.signInWithPassword({email:c.email,password:c.password});
+  if(error&&/credentials/i.test(error.message))localStorage.removeItem(PTCRED)}
+$("sbform").onsubmit=async e=>{e.preventDefault();
+  const email=$("sbemail").value.trim(),password=$("sbpass").value;
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  $("sbpass").value="";
+  if(!error)localStorage.setItem(PTCRED,JSON.stringify({email,password}));
+  $("scanmsg").textContent=error?"Sign-in failed: "+error.message:"Signed in – this device will now sign in automatically."};
+const COLS="barcode,part_name,description,stock_level";
+async function findPart(code){
+  if(sb&&sbUser){try{
+    let {data}=await sb.from("parts").select(COLS).eq("barcode",code).maybeSingle();
+    if(!data){const a=await sb.from("part_barcodes").select("barcode").eq("alias",code).maybeSingle();
+      if(a.data)data=(await sb.from("parts").select(COLS).eq("barcode",a.data.barcode).maybeSingle()).data}
+    if(data)return data}catch{}}
+  const m=(parts||[]).find(x=>String(x.Barcode).toLowerCase()===code.toLowerCase());
+  return m?{barcode:m.Barcode,part_name:m.PartName,description:m.Description,stock_level:m.StockLevel}:null}
+async function addOrder(raw){
+  const code=raw.trim();if(!code)return;
+  const p=await findPart(code);
+  const key=p?p.barcode:code;
+  const ex=tasks.find(t=>!t.done&&t.type==="order"&&t.code===key);
+  if(ex){ex.qty++;pushT(ex)}
+  else{const d=p&&p.description&&p.description!==p.part_name?" – "+p.description.slice(0,70):"";
+    const t={id:Date.now(),type:"order",code:key,qty:1,by:$("from").value,shiftKey:here(),done:false,
+      text:p?`${p.part_name}${d} (${key})`:`Unknown part (${code})`};
+    tasks.push(t);pushT(t)}
+  tsave();render();
+  $("scanmsg").textContent=(p?"✔ "+p.part_name+(p.stock_level!=null?" (stock "+p.stock_level+")":""):"⚠ Not found: "+code)+(ex?" – qty "+ex.qty:" added")}
+$("tscan").onclick=async()=>{
+  if(!window.Html5Qrcode){alert("Scanner needs an internet connection. You can still type the item in.");return}
+  await loadParts();sbStatus();$("scanbox").style.display="flex";
+  scanner=new Html5Qrcode("reader");
+  scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:260,height:150}},c=>{
+    if(c===lastScan.c&&Date.now()-lastScan.t<3000)return;lastScan={c,t:Date.now()};addOrder(c)})
+    .catch(e=>$("scanmsg").textContent="Camera unavailable ("+e+"). Type the code below.")};
+$("manualadd").onclick=()=>{addOrder($("manual").value);$("manual").value=""};
+$("scandone").onclick=()=>{$("scanbox").style.display="none";
+  if(scanner)scanner.stop().then(()=>scanner.clear()).catch(()=>{});scanner=null};
+// ---- parts on order ETA tracker ----
+const EKEY="eta.v1";
+let etas=JSON.parse(localStorage.getItem(EKEY)||"[]");
+const esave=()=>localStorage.setItem(EKEY,JSON.stringify(etas));
+function pushE(x){qpush("eta:"+x.id,"eta",x)}
+function renderEtaSummary(){
+  const open=etas.filter(x=>!x.delivered).sort((a,b)=>a.eta<b.eta?-1:a.eta>b.eta?1:a.id-b.id);
+  $("etacard").style.display=open.length&&!supMode?"":"none";
+  if(!open.length)return;
+  const today=fmtD(new Date());
+  $("etasummary").innerHTML="<table class='r'><tr><th>Asset</th><th>Part no.</th><th>Description</th><th>ETA</th></tr>"+
+    open.map(x=>{const late=x.eta<today,due=x.eta===today;
+      return `<tr><td>${esc(x.asset||"–")}</td><td>${esc(x.part)}</td><td style="text-align:left">${esc(x.desc||"–")}</td>
+      <td class="${late?"flag":due?"ack":""}">${parseD(x.eta).toLocaleDateString([],{day:"numeric",month:"short"})}${late?" ⚠ overdue":due?" (today)":""}</td></tr>`}).join("")+"</table>"}
+function renderEtas(){
+  const open=etas.filter(x=>!x.delivered);
+  $("etaopen").textContent="📦 Special order ETA"+(open.length?" ("+open.length+")":"");
+  renderEtaSummary();
+  if($("etabox").style.display!=="flex")return;
+  const today=fmtD(new Date());
+  $("etalist").innerHTML=[...etas].sort((a,b)=>
+    (a.delivered?1:0)-(b.delivered?1:0)||(a.eta<b.eta?-1:a.eta>b.eta?1:a.id-b.id)).map(x=>{
+    const late=!x.delivered&&x.eta<today,due=!x.delivered&&x.eta===today;
+    const eta=parseD(x.eta).toLocaleDateString([],{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+    return `<div class="entry"${x.delivered?' style="opacity:.55"':""}><b>${esc(x.part)}</b>${x.desc?" — "+esc(x.desc):""}<br>
+    <small>${x.asset?"Asset "+esc(x.asset):""}${x.asset&&x.wo?" • ":""}${x.wo?"WO "+esc(x.wo):""}${x.asset||x.wo?" • ":""}added by ${esc(x.by)} – ${x.shiftKey}</small><br>
+    ${x.delivered?`<b class="ack">✔ Delivered ${parseD(x.delivered).toLocaleDateString([],{weekday:"short",day:"numeric",month:"short"})}${x.deliveredBy?" by "+esc(x.deliveredBy):""}</b>`
+      :`<b class="${late?"flag":due?"ack":""}">ETA ${eta}${late?" – OVERDUE":due?" – due today":""}</b>`}
+    <div class="actions" style="align-items:center">
+      <label class="check" style="margin:0;flex:0 0 auto"><input type="checkbox" data-edone="${x.id}"${x.delivered?" checked":""}> Delivered</label>
+      ${x.delivered?"":`<label style="margin:0;display:flex;align-items:center;gap:6px;font-size:.8rem;flex:0 0 auto">Update ETA
+        <input type="date" data-eupd="${x.id}" value="${x.eta}" style="width:auto;padding:5px"></label>`}
+      <button class="sec" data-edel="${x.id}" style="margin-left:auto;padding:5px 10px;font-size:.85rem">Delete</button></div></div>`}).join("")
+    ||"<p>No special order parts on order.</p>"}
+$("etaopen").onclick=()=>{$("etabox").style.display="flex";renderEtas();$("easset").focus()};
+$("etamanage").onclick=()=>$("etaopen").onclick();
+$("etaclose").onclick=()=>{$("etabox").style.display="none";renderEtaSummary()};
+$("eform").onsubmit=e=>{e.preventDefault();
+  const x={id:Date.now(),asset:$("easset").value.trim(),part:$("epart").value.trim(),
+    desc:$("edesc").value.trim(),wo:$("ewo").value.trim(),eta:$("eeta").value,
+    by:$("from").value,shiftKey:here()};
+  etas.push(x);esave();pushE(x);$("eform").reset();renderEtas()};
+document.addEventListener("click",e=>{const id=e.target.dataset.edel;if(!id)return;
+  if(!confirm("Remove this part completely (no longer needed)? Tick 'Delivered' instead if it arrived."))return;
+  etas=etas.filter(x=>x.id!=id);esave();pushDel("eta:"+id,"eta");renderEtas()});
+document.addEventListener("change",e=>{
+  const done=e.target.dataset.edone, upd=e.target.dataset.eupd;
+  if(done){const x=etas.find(x=>x.id==done);if(!x)return;
+    if(e.target.checked){x.delivered=fmtD(new Date());x.deliveredBy=$("from").value}
+    else{delete x.delivered;delete x.deliveredBy}
+    esave();pushE(x);renderEtas()}
+  else if(upd){const x=etas.find(x=>x.id==upd);if(!x||!e.target.value)return;
+    x.eta=e.target.value;esave();pushE(x);renderEtas()}});
+// ---- lightning warning (Golden Eagle mine site) ----
+// Live strikes: Blitzortung.org community network. Backup: Open-Meteo thunderstorm forecast.
+const LX={lat:-21.9662,lon:120.1201,watch:20,danger:5}; // km rings
+let lxWs=null,lxOk=false,lxSrv=0,lxStrikes=[],lxFc=null;
+const lxDist=(la,lo)=>{const p=Math.PI/180,
+  a=Math.sin((la-LX.lat)*p/2)**2+Math.cos(la*p)*Math.cos(LX.lat*p)*Math.sin((lo-LX.lon)*p/2)**2;
+  return 12742*Math.asin(Math.sqrt(a))};
+function lxDecode(b){ // LZW decoder for Blitzortung websocket frames
+  const e={},d=(b+"").split(""),g=[d[0]];let c=d[0],f=c,o=256;
+  for(let i=1;i<d.length;i++){
+    let a=d[i].charCodeAt(0);
+    a=256>a?d[i]:e[a]?e[a]:f+c;
+    g.push(a);c=a.charAt(0);e[o++]=f+c;f=a}
+  return g.join("")}
+function lxConnect(){
+  if(lxWs||!navigator.onLine)return;
+  try{lxWs=new WebSocket(["wss://ws1.blitzortung.org/","wss://ws7.blitzortung.org/","wss://ws8.blitzortung.org/"][lxSrv%3])}
+  catch{lxSrv++;return}
+  lxWs.onopen=()=>{lxOk=true;lxWs.send('{"a":111}');renderLx()};
+  lxWs.onmessage=m=>{
+    try{const s=JSON.parse(lxDecode(m.data));
+      if(typeof s.lat!=="number"||Math.abs(s.lat-LX.lat)>0.3||Math.abs(s.lon-LX.lon)>0.3)return;
+      const d=lxDist(s.lat,s.lon);
+      if(d<=LX.watch){lxStrikes.push({t:Date.now(),d});renderLx()}}catch{}};
+  lxWs.onclose=lxWs.onerror=()=>{
+    if(!lxWs)return;
+    lxWs=null;lxOk=false;lxSrv++;renderLx();setTimeout(lxConnect,30000)};
+}
+// ---- red alert alarm (siren + voice) ----
+let lxCtx=null,lxAlertOn=false;
+function lxAudio(){
+  if(!lxCtx){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;lxCtx=new AC()}
+  if(lxCtx.state==="suspended")lxCtx.resume();
+  return lxCtx}
+function lxSiren(dur=4){ // rising/falling siren sweep
+  const ctx=lxAudio();if(!ctx)return;
+  try{const t=ctx.currentTime,o=ctx.createOscillator(),g=ctx.createGain();
+    o.type="sawtooth";o.connect(g);g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.5,t);
+    for(let i=0;i<dur;i++){
+      o.frequency.setValueAtTime(600,t+i);
+      o.frequency.linearRampToValueAtTime(1200,t+i+0.5);
+      o.frequency.linearRampToValueAtTime(600,t+i+1)}
+    g.gain.setValueAtTime(0.5,t+dur);g.gain.linearRampToValueAtTime(0,t+dur+0.2);
+    o.start(t);o.stop(t+dur+0.2)}catch{}}
+function lxSpeak(){
+  if(!window.speechSynthesis)return;
+  try{speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance("Red Alert Active");
+    u.rate=0.9;u.pitch=0.8;u.volume=1;
+    speechSynthesis.speak(u)}catch{}}
+let lxKeep=null;
+function lxKeepAlive(){ // inaudible tone keeps the audio context running when the tab is backgrounded
+  const ctx=lxAudio();if(!ctx||lxKeep)return;
+  try{const o=ctx.createOscillator(),g=ctx.createGain();
+    o.frequency.value=30;g.gain.value=0.0001;
+    o.connect(g);g.connect(ctx.destination);o.start();lxKeep=o}catch{}}
+function lxNotify(){ // OS-level popup so the alert is seen from another app/browser
+  if(!("Notification" in window)||Notification.permission!=="granted")return;
+  try{new Notification("⛔ RED ALERT – Lightning",{
+    body:`Lightning within ${LX.danger} km of Golden Eagle site`,
+    tag:"lx-red",requireInteraction:true})}catch{}}
+function lxRedAlert(){lxSiren(4);setTimeout(lxSpeak,4300);lxNotify()}
+// browsers block audio until first user interaction – unlock audio + ask for
+// notification permission on first tap so alerts work while tab is in background
+document.addEventListener("pointerdown",()=>{
+  lxKeepAlive();
+  if("Notification" in window&&Notification.permission==="default")
+    Notification.requestPermission().catch(()=>{})},{once:true});
+// re-sound the alarm every 2 min while the danger state persists
+setInterval(()=>{if(lxAlertOn)lxRedAlert()},120000);
+async function lxForecast(){
+  if(!navigator.onLine)return;
+  try{const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LX.lat}&longitude=${LX.lon}&hourly=weather_code&forecast_hours=12&timezone=auto`);
+    const j=await r.json();
+    const i=j.hourly.weather_code.findIndex(c=>c===95||c===96||c===99);
+    lxFc=i>=0?j.hourly.time[i]:null}
+  catch{lxFc=null}
+  renderLx()}
+function renderLx(){
+  const now=Date.now();
+  lxStrikes=lxStrikes.filter(s=>now-s.t<30*60000);
+  const danger=lxStrikes.filter(s=>s.d<=LX.danger);
+  if(danger.length&&!lxAlertOn){lxAlertOn=true;lxRedAlert()}
+  else if(!danger.length&&lxAlertOn){lxAlertOn=false;try{speechSynthesis.cancel()}catch{}}
+  const hit=danger.length?danger:lxStrikes;
+  const card=$("lxcard");let cls="",html="";
+  if(hit.length){
+    cls=danger.length?"lx-danger":"lx-watch";
+    const near=Math.min(...hit.map(s=>s.d)).toFixed(1);
+    const ago=Math.round((now-Math.max(...hit.map(s=>s.t)))/60000);
+    html=`<b>${danger.length?"⛔ DANGER – lightning within "+LX.danger+" km of site":"⚠ Lightning within "+LX.watch+" km of site"}</b><br>
+      ${hit.length} strike${hit.length>1?"s":""} in the last 30 min • nearest ${near} km • last ${ago<1?"<1":ago} min ago`}
+  else{
+    html=`✅ No strikes within ${LX.watch} km in the last 30 min`;
+    if(lxFc)html+=`<br>🌩 Thunderstorms forecast near site from ${new Date(lxFc).toLocaleString([],{weekday:"short",hour:"2-digit",minute:"2-digit"})}`}
+  html+=`<br><small>${lxOk?"Live strike feed connected":"⚠ Live strike feed offline – forecast only"}</small>`;
+  card.className="card "+cls;
+  card.style.display="";
+  $("lxbody").innerHTML=html}
+lxConnect();lxForecast();
+setInterval(renderLx,60000);
+setInterval(lxForecast,15*60000);
+window.addEventListener("online",lxConnect);
+// ---- sign on / off ----
+const SKEY="shift.v1", PKEY="pins.v1";
+let ss=JSON.parse(localStorage.getItem(SKEY)||'{"on":[],"log":[]}');
+if(!Array.isArray(ss.on)){ss.on=ss.cur?[ss.cur]:[];delete ss.cur} // migrate old single-user format
+const pins=JSON.parse(localStorage.getItem(PKEY)||"{}");
+const ssave=()=>localStorage.setItem(SKEY,JSON.stringify(ss));
+async function hash(pin){
+  const t="handover:"+pin;
+  if(window.crypto&&crypto.subtle){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));
+    return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+  let h=5381;for(const c of t)h=(h*33)^c.charCodeAt(0);return "d"+(h>>>0)}
+USERS.forEach(n=>$("su").add(new Option(n,n)));
+let lockOff=false; // false = sign on, true = sign off
+function fillSu(list){const su=$("su"),v=su.value;su.innerHTML="";list.forEach(n=>su.add(new Option(n,n)));if(list.includes(v))su.value=v}
+function openLock(off){lockOff=!!off;
+  if(lockOff)fillSu(ss.on.map(c=>c.user));
+  else{fillSu(USERS);$("su").value=whoOn(parseD(shiftDate()),currentShift())}
+  showLock()}
+function showLock(){
+  $("locktitle").textContent=lockOff?"Sign off shift":"Sign on to shift";
+  $("locksub").textContent=lockOff?"Sign off":"Sign on";
+  $("lockinfo").textContent=ss.on.length?"On shift: "+ss.on.map(c=>c.user).join(", "):"Nobody is signed on.";
+  $("spin").value=$("spin2").value="";$("lockerr").textContent="";
+  $("newpin").style.display=lockOff||pins[$("su").value]?"none":"block";
+  $("lockcancel").style.display=ss.on.length?"":"none";
+  $("lock").style.display="flex";$("spin").focus()}
+$("su").onchange=showLock;
+$("signon").onclick=()=>openLock();
+$("signoff").onclick=()=>openLock(true);
+$("lockcancel").onclick=()=>{if(ss.on.length)$("lock").style.display="none"};
+document.addEventListener("click",e=>{if(e.target.id==="bsign")openLock()});
+$("lockform").onsubmit=async e=>{
+  e.preventDefault();const u=$("su").value,pin=$("spin").value,err=m=>$("lockerr").textContent=m;
+  if(!/^\d{4,6}$/.test(pin))return err("PIN must be 4–6 digits");
+  if(!pins[u]&&sb&&navigator.onLine){ // PIN may exist on another device – check server first
+    try{const {data:pr}=await sb.from("handover_sync").select("value").eq("id","pin:"+u).maybeSingle();
+      if(pr&&pr.value&&pr.value.hash){pins[u]=pr.value.hash;localStorage.setItem(PKEY,JSON.stringify(pins))}}catch{}}
+  const hp=await hash(pin);
+  if(lockOff){ // each person signs themselves off with their own PIN
+    const c=ss.on.find(x=>x.user===u);
+    if(!c)return err(u+" isn't signed on");
+    if(!pins[u]||pins[u]!==hp)return err("Wrong PIN");
+    if(!data.some(h=>h.from===u&&h.created>=c.at)&&
+       !confirm(u+" hasn't submitted a handover this shift. Sign off anyway?"))return;
+    c.off=new Date().toISOString();ss.log.push(c);ss.on=ss.on.filter(x=>x!==c);
+    ssave();pushShift();render();
+    if(ss.on.length)$("lock").style.display="none";else openLock();
+    return}
+  if(!pins[u]){if(pin!==$("spin2").value)return err("PINs don't match");pins[u]=hp;localStorage.setItem(PKEY,JSON.stringify(pins));pushPin(u)}
+  else if(pins[u]!==hp)return err("Wrong PIN");
+  const rost=whoOn(parseD(shiftDate()),currentShift());
+  if(rost!==u&&!ss.on.some(c=>c.user===rost)&&!confirm(`${rost} is rostered on this ${currentShift().toLowerCase()} shift, not ${u}. Sign on anyway (covering)?`))return;
+  if(!ss.on.some(c=>c.user===u))ss.on.push({user:u,at:new Date().toISOString(),shiftKey:here()});
+  ssave();pushShift();$("lock").style.display="none";defaults();render();ptAutoSignIn()};
+// ---- cross-device sync (Supabase handover_sync table) ----
+const SOUT="sync.out.v1", SLAST="sync.last.v1";
+let out=JSON.parse(localStorage.getItem(SOUT)||"[]"), lastSync=localStorage.getItem(SLAST)||"";
+let applying=false, flushing=false, pullOk=null;
+const osave=()=>localStorage.setItem(SOUT,JSON.stringify(out));
+function syncUI(){
+  const s=$("sync");if(!sb){s.textContent="";return}
+  s.textContent=out.length?"⇡ "+out.length+" to sync":pullOk===false?"⚠ sync offline":pullOk?"☁ synced":"";
+  s.style.color=out.length||pullOk===false?"#7a2a2a":"#3a6"}
+function qpush(id,kind,value){
+  if(applying)return;
+  out=out.filter(o=>o.id!==id);out.push({id,kind,value});osave();syncUI();flush()}
+function pushH(h){qpush("handover:"+h.id,"handover",h)}
+function pushT(t){qpush("task:"+t.id,"task",t)}
+function pushDel(id,kind){qpush(id,kind,{deleted:true})}
+function pushPin(u){qpush("pin:"+u,"pin",{hash:pins[u]})}
+function pushShift(){qpush("shift:current","shift",{on:ss.on})}
+async function flush(){
+  if(!sb||flushing||!out.length||!navigator.onLine)return;
+  flushing=true;
+  try{while(out.length){
+    const b=out.slice(0,50);
+    const {error}=await sb.from("handover_sync").upsert(b.map(o=>({id:o.id,kind:o.kind,value:o.value})));
+    if(error)break;
+    out.splice(0,b.length);osave()}}
+  finally{flushing=false;syncUI()}}
+function applyRow(r){
+  const v=r.value||{};
+  if(r.kind==="handover"){const id=+r.id.slice(9);
+    data=data.filter(h=>h.id!==id);
+    if(!v.deleted){data.push(v);data.sort((a,b)=>b.id-a.id)}}
+  else if(r.kind==="task"){const id=+r.id.slice(5);
+    tasks=tasks.filter(t=>t.id!==id);
+    if(!v.deleted){tasks.push(v);tasks.sort((a,b)=>a.id-b.id)}
+    else if(!rseen.includes(id)){rseen.push(id);localStorage.setItem(RSEEN,JSON.stringify(rseen))}}
+  else if(r.kind==="eta"){const id=+r.id.slice(4);
+    etas=etas.filter(x=>x.id!==id);
+    if(!v.deleted)etas.push(v)}
+  else if(r.kind==="pin"){const u=r.id.slice(4);if(v.hash)pins[u]=v.hash}
+  else if(r.kind==="shift")ss.on=Array.isArray(v.on)?v.on:v.cur?[v.cur]:[]}
+async function pull(){
+  if(!sb||!navigator.onLine){syncUI();return}
+  const first=!lastSync;
+  let q=sb.from("handover_sync").select("id,kind,value,updated_at").order("updated_at",{ascending:true}).limit(1000);
+  if(lastSync)q=q.gt("updated_at",lastSync);
+  const {data:rows,error}=await q;
+  if(error){pullOk=false;syncUI();return}
+  pullOk=true;
+  const pend=new Set(out.map(o=>o.id)), seen=new Set(), prevCur=JSON.stringify(ss.on);
+  applying=true;
+  for(const r of rows){seen.add(r.id);lastSync=r.updated_at;if(!pend.has(r.id))applyRow(r)}
+  applying=false;
+  if(!lastSync)lastSync="1970-01-01T00:00:00+00:00";
+  localStorage.setItem(SLAST,lastSync);
+  if(first){ // seed server with anything this device already had
+    data.forEach(h=>{if(!seen.has("handover:"+h.id))pushH(h)});
+    tasks.forEach(t=>{if(!seen.has("task:"+t.id))pushT(t)});
+    etas.forEach(x=>{if(!seen.has("eta:"+x.id))pushE(x)});
+    Object.keys(pins).forEach(u=>{if(!seen.has("pin:"+u))pushPin(u)});
+    if(ss.on.length&&!seen.has("shift:current"))pushShift()}
+  if(!rows.length){syncUI();return}
+  save();tsave();esave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
+  if(JSON.stringify(ss.on)!==prevCur){ // signed on/off from another device
+    if(!ss.on.length&&$("lock").style.display!=="flex")openLock();
+    else if($("lock").style.display==="flex")openLock(lockOff&&ss.on.length?true:false)}
+  render();flush();syncUI()}
+window.addEventListener("online",()=>{flush();pull()});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
+setInterval(pull,20000);
+pull();flush();syncUI();
+defaults();render();setInterval(render,60000);
+if(!ss.on.length)openLock();
+</script>
+</body>
+</html>
