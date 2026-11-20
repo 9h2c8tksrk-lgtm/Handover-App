@@ -74,10 +74,29 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
     width:auto;max-width:360px;max-height:190px;overflow-y:auto;z-index:6}
   #maintenanceCard{top:270px;max-height:calc(100vh - 290px)}
 }
+
+/* Authentication gate: visual access control only; database RLS is mandatory. */
+body.auth-locked > :not(#authGate){display:none!important}
+#authGate{position:fixed;inset:0;z-index:1000;background:#1b1f24;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+#authGate .card{width:100%;max-width:430px;border:1px solid #48515b}
+#authGate p{font-size:.9rem;color:#c7cbd0}
+#authGate #authError{color:#ff9292;min-height:1.4em}
+#authLogout{display:none}
 </style>
 </head>
-<body>
-<header><h1>🔧 Shift Handover</h1><div id="who"><span id="sync" style="font-size:.8rem"></span><span id="now"></span><span id="onshift"></span><button id="supview" class="sec" style="display:none">👁 Handovers view</button><button id="signon" class="sec">Sign on</button><button id="signoff" class="sec">Sign off</button></div></header>
+<body class="auth-locked">
+<div id="authGate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+  <form class="card" id="authForm">
+    <h2 id="authTitle">🔐 Golden Eagle Stores Handover</h2>
+    <p>Sign in with your authorised Supabase account to access shared workshop records.</p>
+    <label for="authEmail">Company email</label><input id="authEmail" type="email" autocomplete="username" required>
+    <label for="authPassword">Password</label><input id="authPassword" type="password" autocomplete="current-password" required>
+    <div id="authError" role="status" aria-live="polite"></div>
+    <button id="authSubmit" type="submit" style="width:100%">Sign in</button>
+    <p id="authHelp">Checking authentication…</p>
+  </form>
+</div>
+<header><h1>🔧 Shift Handover</h1><div id="who"><span id="sync" style="font-size:.8rem"></span><span id="now"></span><span id="onshift"></span><button id="supview" class="sec" style="display:none">👁 Handovers view</button><button id="authLogout" class="sec" type="button">🔒 Log out</button><button id="signon" class="sec">Sign on</button><button id="signoff" class="sec">Sign off</button></div></header>
 <div id="scanbox"><div class="card">
   <h2>Scan parts to order</h2>
   <div id="reader"></div>
@@ -134,7 +153,14 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 
 <section id="warrantySection" class="card" style="display:none">
   <h2>🔧 Warranty Register</h2>
-  <form id="warrantyForm">
+  <div class="tabs" id="warrantyTemplateTabs" aria-label="Warranty form type">
+  <button type="button" data-wtemplate="standard" class="active">📋 Standard</button>
+  <button type="button" data-wtemplate="bre">🚛 BRE</button>
+  <button type="button" data-wtemplate="cjd">🔧 CJD</button>
+</div>
+<p id="wTemplateHelp" style="font-size:.85rem;color:#bbb" aria-live="polite"></p>
+<form id="warrantyForm">
+  <select id="wTemplate" aria-label="Warranty form type" style="display:none"><option value="standard">Standard</option><option value="bre">BRE</option><option value="cjd">CJD</option></select>
     <input type="hidden" id="wEditId">
     <div class="row"><div><label>Date raised</label><input id="wDate" type="date" required></div>
       <div><label>Asset number</label><input id="wAsset" placeholder="e.g. PA247"></div></div>
@@ -154,6 +180,61 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
     <label>Date returned</label><input id="wReturnedDate" type="date">
     <label>Resolution</label><select id="wResolution"><option value="">Not resolved</option>
       <option>Credit received</option><option>Replacement received</option><option>Other</option></select>
+
+    <h2 style="margin-top:18px">Equipment &amp; ownership</h2>
+    <label>Model</label><input id="wModel">
+    <label>Serial / VIN number</label><input id="wVin">
+    <div class="row"><div><label>Registration number</label><input id="wRegistration"></div>
+      <div><label>Fleet number</label><input id="wFleet"></div></div>
+    <div class="row"><div><label>Year</label><input id="wYear" inputmode="numeric"></div>
+      <div><label>First delivery date</label><input type="date" id="wDelivery"></div></div>
+    <div class="row"><div><label>Current kilometres</label><input id="wKm" inputmode="decimal"></div>
+      <div><label>Current operating hours / hubometer</label><input id="wHours" inputmode="decimal"></div></div>
+    <label>Vehicle owner</label><input id="wOwner" placeholder="MGM Bulk">
+    <label>Owner contact / phone / email</label><textarea id="wOwnerContact"></textarea>
+    <label>Proposed repair agent / contact</label><textarea id="wRepairAgent"></textarea>
+
+    <h2 style="margin-top:18px">Failure &amp; repair assessment</h2>
+    <label>Date of failure</label><input type="date" id="wFailureDate">
+    <label>Cause of failure / inspection findings</label><textarea id="wCause"></textarea>
+    <label>Proposed remedy</label><textarea id="wRemedy"></textarea>
+    <label>Failed part number(s) / serial number(s)</label><textarea id="wFailedParts"></textarea>
+    <label>Original GA number (BRE)</label><input id="wGaNumber">
+    <label>Supplier reference / service call number</label><input id="wServiceCall">
+    <label>Repair approval reference / approved by</label><input id="wApproval">
+
+    <h2 style="margin-top:18px">Warranty eligibility checklist</h2>
+    <label class="check"><input type="checkbox" id="wWithinWarranty"> Within warranty period</label>
+    <label class="check"><input type="checkbox" id="wCovered"> Fault appears covered by warranty</label>
+    <label class="check"><input type="checkbox" id="wNoMisuse"> No contributing misuse or damage</label>
+    <label class="check"><input type="checkbox" id="wContacted"> Supplier contacted before repairs, where possible</label>
+    <label class="check"><input type="checkbox" id="wInspected"> Fault confirmed by inspection or testing</label>
+    <label class="check"><input type="checkbox" id="wApprovalBeforeRepair"> Repair approval obtained before work (BRE requirement)</label>
+
+    <h2 style="margin-top:18px">Photo / evidence checklist</h2>
+    <p style="font-size:.8rem;color:#aaa">Tick only when evidence has been collected. This checklist does not upload or attach photos.</p>
+    <label class="check"><input type="checkbox" id="wPhotoVin"> VIN / compliance plate</label>
+    <label class="check"><input type="checkbox" id="wPhotoRegistration"> Registration plate</label>
+    <label class="check"><input type="checkbox" id="wPhotoKm"> Kilometres / odometer</label>
+    <label class="check"><input type="checkbox" id="wPhotoHours"> Operating hours / hubometer</label>
+    <label class="check"><input type="checkbox" id="wPhotoCode"> Error code / warning display (if applicable)</label>
+    <label class="check"><input type="checkbox" id="wPhotoFailed"> Failed part and serial number</label>
+    <label class="check"><input type="checkbox" id="wPhotoDefect"> Close-up of defect</label>
+    <label class="check"><input type="checkbox" id="wPhotoNew"> Replacement part installed</label>
+    <label class="check"><input type="checkbox" id="wPhotoTag"> Failed part with warranty tag</label>
+    <label class="check"><input type="checkbox" id="wPhotoPartNo"> Part number(s)</label>
+
+    <h2 style="margin-top:18px">Supplier submission requirements</h2>
+    <label class="check"><input type="checkbox" id="wCummins"> Cummins EIF download obtained (if applicable)</label>
+    <label class="check"><input type="checkbox" id="wEaton"> Eaton/Cummins EIF, TFSR and Eaton approval obtained (if applicable)</label>
+    <label class="check"><input type="checkbox" id="wPo"> PO subject to warranty raised (if parts required)</label>
+    <label class="check"><input type="checkbox" id="wBattery"> Battery test results recorded (if applicable)</label>
+    <label class="check"><input type="checkbox" id="wPartsReturn"> Failed parts return arranged / supplier instructions checked</label>
+    <label>Claim ready to submit?</label><select id="wReady"><option value="">Not assessed</option><option>Yes</option><option>No</option></select>
+    <label>Supervisor / manager sign-off name</label><input id="wSupervisor">
+    <label>Sign-off date</label><input type="date" id="wSignoffDate">
+    <p style="font-size:.8rem;color:#aaa">CJD checklist requires supervisor/manager signature; a typed name here is a tracking field, not a digital signature.</p>
+
     <label>Notes / follow-up</label><textarea id="wNotes"></textarea>
     <div class="actions"><button type="submit" id="wSaveButton">Save warranty</button>
       <button type="button" class="sec" id="wCancel">Clear / cancel edit</button></div>
@@ -530,26 +611,14 @@ async function loadParts(){
 const sb=window.supabase?supabase.createClient("https://botdhowoytwczstqrjom.supabase.co","sb_publishable_FQkw8ntiw0IT-XynvcIaJg_4wv3l5tO"):null;
 let sbUser=null;
 function sbStatus(){
-  $("sbstat").textContent=!sb?"Parts Tracker unavailable offline – using basic parts list.":sbUser?"🔩 Parts Tracker connected: "+sbUser.email:"Not signed in to Parts Tracker – using basic parts list.";
-  $("sbform").style.display=sb&&!sbUser?"block":"none"}
-if(sb){sb.auth.getSession().then(({data})=>{sbUser=data.session?data.session.user:null;sbStatus();if(!sbUser)ptAutoSignIn()});
-  sb.auth.onAuthStateChange((_,se)=>{sbUser=se?se.user:null;sbStatus()})}
-// Remember Parts Tracker credentials on this device so signing on to shift also signs into Parts Tracker
-const PTCRED="pt.cred.v1";
-async function ptAutoSignIn(){
-  if(!sb||sbUser||!navigator.onLine)return;
-  const c=JSON.parse(localStorage.getItem(PTCRED)||"null");if(!c)return;
-  const {error}=await sb.auth.signInWithPassword({email:c.email,password:c.password});
-  if(error&&/credentials/i.test(error.message))localStorage.removeItem(PTCRED)}
-$("sbform").onsubmit=async e=>{e.preventDefault();
-  const email=$("sbemail").value.trim(),password=$("sbpass").value;
-  const {error}=await sb.auth.signInWithPassword({email,password});
-  $("sbpass").value="";
-  if(!error)localStorage.setItem(PTCRED,JSON.stringify({email,password}));
-  $("scanmsg").textContent=error?"Sign-in failed: "+error.message:"Signed in – this device will now sign in automatically."};
+  $("sbstat").textContent=!sb?"Parts Tracker unavailable offline – using basic parts list.":sbUser?"🔩 Parts Tracker connected: "+sbUser.email:"Signed in to Handover required for parts lookup.";
+  $("sbform").style.display="none"}
+// App authentication replaces the old Parts Tracker password-saving flow.
+$("sbform").style.display="none";
+localStorage.removeItem("pt.cred.v1");
 const COLS="barcode,part_name,description,stock_level";
 async function findPart(code){
-  if(sb&&sbUser){try{
+  if(sb&&appAuthorized&&sbUser){try{
     let {data}=await sb.from("parts").select(COLS).eq("barcode",code).maybeSingle();
     if(!data){const a=await sb.from("part_barcodes").select("barcode").eq("alias",code).maybeSingle();
       if(a.data)data=(await sb.from("parts").select(COLS).eq("barcode",a.data.barcode).maybeSingle()).data}
@@ -847,7 +916,7 @@ $("lockform").onsubmit=async e=>{
   const rost=whoOn(parseD(shiftDate()),currentShift());
   if(rost!==u&&!ss.on.some(c=>c.user===rost)&&!confirm(`${rost} is rostered on this ${currentShift().toLowerCase()} shift, not ${u}. Sign on anyway (covering)?`))return;
   if(!ss.on.some(c=>c.user===u))ss.on.push({user:u,at:new Date().toISOString(),shiftKey:here()});
-  ssave();pushShift();$("lock").style.display="none";defaults();render();welcomeGreeting(u);ptAutoSignIn()};
+  ssave();pushShift();$("lock").style.display="none";defaults();render();welcomeGreeting(u)};
 // ---- Warranty register (uses existing Supabase sync queue) ----
 const WKEY="warranties.v1";
 let warranties=JSON.parse(localStorage.getItem(WKEY)||"[]");
@@ -856,8 +925,78 @@ function pushW(w){qpush("warranty:"+w.id,"warranty",w)}
 const warrantyFields={date:"wDate",asset:"wAsset",wo:"wWO",supplier:"wSupplier",
   part:"wPart",description:"wDescription",reason:"wReason",warrantyNo:"wWarrantyNo",
   claimNo:"wClaimNo",status:"wStatus",returnedDate:"wReturnedDate",
-  resolution:"wResolution",notes:"wNotes"};
+  resolution:"wResolution",notes:"wNotes",
+  model:"wModel",
+  vin:"wVin",
+  registration:"wRegistration",
+  fleet:"wFleet",
+  year:"wYear",
+  delivery:"wDelivery",
+  km:"wKm",
+  hours:"wHours",
+  owner:"wOwner",
+  ownerContact:"wOwnerContact",
+  repairAgent:"wRepairAgent",
+  failureDate:"wFailureDate",
+  cause:"wCause",
+  remedy:"wRemedy",
+  failedParts:"wFailedParts",
+  gaNumber:"wGaNumber",
+  serviceCall:"wServiceCall",
+  approval:"wApproval",
+  ready:"wReady",
+  supervisor:"wSupervisor",
+  signoffDate:"wSignoffDate"
+};
+const warrantyChecklistFields={withinWarranty:"wWithinWarranty",covered:"wCovered",noMisuse:"wNoMisuse",contacted:"wContacted",inspected:"wInspected",approvalBeforeRepair:"wApprovalBeforeRepair",photoVin:"wPhotoVin",photoRegistration:"wPhotoRegistration",photoKm:"wPhotoKm",photoHours:"wPhotoHours",photoCode:"wPhotoCode",photoFailed:"wPhotoFailed",photoDefect:"wPhotoDefect",photoNew:"wPhotoNew",photoTag:"wPhotoTag",photoPartNo:"wPhotoPartNo",cummins:"wCummins",eaton:"wEaton",po:"wPo",battery:"wBattery",partsReturn:"wPartsReturn"};
+
+// Supplier-specific warranty views. All values are retained when switching.
+function setWarrantyTemplate(mode){
+  if(!["standard","bre","cjd"].includes(mode))mode="standard";
+  const form=$("warrantyForm");
+  $("wTemplate").value=mode;
+  document.querySelectorAll("[data-wtemplate]").forEach(b=>{
+    b.classList.toggle("active",b.dataset.wtemplate===mode);
+    b.setAttribute("aria-pressed",String(b.dataset.wtemplate===mode));
+  });
+  const descriptions={
+    standard:"Standard warranty register: your original claim fields.",
+    bre:"BRE warranty repair authorisation: equipment, owner, failure and approval details.",
+    cjd:"CJD warranty checklist: equipment, eligibility, inspection, photo evidence and submission checks."
+  };
+  $("wTemplateHelp").textContent=descriptions[mode];
+  // The expanded fields are already in the form. Hide fields not relevant to
+  // this template without clearing their values. Standard always shows only
+  // original fields; BRE/CJD share common details and have specific checks.
+  const bre=new Set(["wModel","wVin","wRegistration","wFleet","wYear","wDelivery","wKm","wHours",
+    "wOwner","wOwnerContact","wRepairAgent","wFailureDate","wCause","wRemedy","wFailedParts",
+    "wGaNumber","wServiceCall","wApproval","wApprovalBeforeRepair","wPhotoVin","wPhotoRegistration",
+    "wPhotoKm","wPhotoHours","wPhotoFailed","wPhotoDefect","wPhotoPartNo","wReady","wSupervisor","wSignoffDate"]);
+  const cjd=new Set(["wModel","wVin","wKm","wHours","wFailureDate","wCause","wRemedy","wFailedParts",
+    "wWithinWarranty","wCovered","wNoMisuse","wContacted","wInspected","wPhotoVin","wPhotoKm",
+    "wPhotoHours","wPhotoCode","wPhotoFailed","wPhotoDefect","wPhotoNew","wPhotoTag","wPhotoPartNo",
+    "wCummins","wEaton","wPo","wBattery","wPartsReturn","wReady","wSupervisor","wSignoffDate"]);
+  const all=new Set([...bre,...cjd]);
+  for(const id of all){
+    const input=$(id);if(!input)continue;
+    const show=mode==="bre"?bre.has(id):mode==="cjd"?cjd.has(id):false;
+    const label=input.closest("label") || (input.previousElementSibling?.tagName==="LABEL"?input.previousElementSibling:null);
+    if(input.closest("label")){input.closest("label").style.display=show?"":"none"}
+    else{input.style.display=show?"":"none";if(label)label.style.display=show?"":"none"}
+  }
+  // Hide headings when the expanded form is not in use.
+  form.querySelectorAll("h2").forEach(h=>{
+    if(["Equipment & ownership","Failure & repair assessment","Warranty eligibility checklist",
+      "Photo / evidence checklist","Supplier submission requirements"].includes(h.textContent.trim())){
+      h.style.display=mode==="standard"?"none":"";
+    }
+  });
+  // Do not hide the original claim fields, existing notes, or saved records.
+}
+document.querySelectorAll("[data-wtemplate]").forEach(b=>b.addEventListener("click",()=>setWarrantyTemplate(b.dataset.wtemplate)));
+
 function clearWarranty(){
+  setWarrantyTemplate("standard");
   $("warrantyForm").reset();$("wEditId").value="";
   $("wDate").value=fmtD(new Date());$("wSaveButton").textContent="Save warranty";
 }
@@ -884,6 +1023,8 @@ $("warrantyForm").onsubmit=e=>{
     by:old?old.by:$("from").value,updatedBy:$("from").value,
     updatedAt:new Date().toISOString()};
   Object.entries(warrantyFields).forEach(([key,field])=>w[key]=$(field).value.trim());
+  Object.entries(warrantyChecklistFields).forEach(([key,id])=>w[key]=$(id).checked);
+  w.template=$("wTemplate").value;
   w.returnedToStores=$("wStores").checked;
   w.returnedToSupplier=$("wSupplierReturn").checked;
   if(old)warranties=warranties.map(x=>x.id===old.id?w:x);
@@ -909,6 +1050,16 @@ Date returned: ${esc(String(w.returnedDate||""))}
 Resolution: ${esc(String(w.resolution||""))}
 Notes: ${esc(String(w.notes||""))}
 Raised by: ${esc(String(w.by||""))}</pre>
+    <details><summary>Equipment, assessment &amp; checklist</summary><pre>${esc([
+      ["Model",w.model],["VIN",w.vin],["Registration",w.registration],["Fleet",w.fleet],
+      ["Year",w.year],["First delivery",w.delivery],["KM",w.km],["Hours",w.hours],
+      ["Owner",w.owner],["Owner contact",w.ownerContact],["Repair agent",w.repairAgent],
+      ["Failure date",w.failureDate],["Cause / inspection",w.cause],["Remedy",w.remedy],
+      ["Failed parts",w.failedParts],["Original GA",w.gaNumber],["Service call",w.serviceCall],
+      ["Approval",w.approval],["Ready to submit",w.ready],["Supervisor",w.supervisor],
+      ["Sign-off date",w.signoffDate]
+    ].filter(([k,v])=>v).map(([k,v])=>k+": "+v).join("\n"))}</pre>
+    <small>Checklist completed: ${Object.keys(warrantyChecklistFields).filter(k=>w[k]).length} / ${Object.keys(warrantyChecklistFields).length}</small></details>
     <div class="actions"><button type="button" data-wedit="${w.id}">Edit</button>
     <button type="button" class="sec" data-wdel="${w.id}">Delete</button></div></div>`).join("")
     ||"<p>No matching warranty claims.</p>";
@@ -925,6 +1076,8 @@ document.addEventListener("click",e=>{
   }
   $("wEditId").value=w.id;
   Object.entries(warrantyFields).forEach(([key,field])=>$(field).value=w[key]||"");
+  Object.entries(warrantyChecklistFields).forEach(([key,id])=>$(id).checked=!!w[key]);
+  setWarrantyTemplate(w.template||"standard");
   $("wStores").checked=!!w.returnedToStores;
   $("wSupplierReturn").checked=!!w.returnedToSupplier;
   $("wSaveButton").textContent="Update warranty";
@@ -1101,13 +1254,89 @@ $("pmCancel").onclick = pmClear;
 
 renderMaintenance();
 
+// ---- Supabase Auth + explicit allowlist ----
+let appAuthorized=false,authChecking=false,authBooted=false;
+function authMessage(text){$("authError").textContent=text}
+function authGate(show){
+  document.body.classList.toggle("auth-locked",show);
+  $("authGate").style.display=show?"flex":"none";
+  $("authLogout").style.display=show?"none":"";
+}
+async function verifyAppUser(){
+  if(!sb){authMessage("Supabase library unavailable. Check your connection.");return false}
+  try{
+    // getUser verifies the session with Supabase Auth, not just a cached token.
+    const {data:{user},error}=await sb.auth.getUser();
+    if(error||!user){sbUser=null;return false}
+    const {data:membership,error:accessError}=await sb.from("handover_authorized_users")
+      .select("user_id").eq("user_id",user.id).maybeSingle();
+    if(accessError){authMessage("Access check unavailable: "+accessError.message);return false}
+    if(!membership){authMessage("Account signed in but not authorised for this app. Contact the administrator.");return false}
+    sbUser=user;return true;
+  }catch(e){authMessage("Authentication unavailable. Check your connection.");return false}
+}
+async function refreshAppAuth(){
+  if(authChecking)return;
+  authChecking=true;
+  authGate(true);
+  const allowed=await verifyAppUser();
+  appAuthorized=allowed;
+  authGate(!allowed);
+  if(allowed){
+    authMessage("");sbStatus();
+    if(!authBooted){
+      authBooted=true;
+      defaults();render();
+      if(!ss.on.length)openLock();
+      setInterval(()=>{if(appAuthorized)render()},60000);
+    }
+    await pull();await flush();syncUI();
+  }
+  authChecking=false;
+}
+async function bootstrapAuth(){
+  authGate(true);
+  $("authHelp").textContent="Only approved staff accounts can access this app.";
+  if(!sb){authMessage("Supabase unavailable. Cannot sign in.");return}
+  sb.auth.onAuthStateChange((event)=>{
+    // Defer queries outside the auth callback to avoid auth-client deadlocks.
+    if(event==="SIGNED_IN"||event==="TOKEN_REFRESHED")setTimeout(refreshAppAuth,0);
+    if(event==="SIGNED_OUT"){
+      appAuthorized=false;sbUser=null;authGate(true);syncUI();
+    }
+  });
+  await refreshAppAuth();
+}
+$("authForm").onsubmit=async e=>{
+  e.preventDefault();if(!sb)return;
+  authMessage("");
+  const email=$("authEmail").value.trim(),password=$("authPassword").value;
+  $("authSubmit").disabled=true;
+  try{
+    const {error}=await sb.auth.signInWithPassword({email,password});
+    $("authPassword").value="";
+    if(error)authMessage("Sign-in failed: "+error.message);
+    else await refreshAppAuth();
+  }catch{authMessage("Sign-in unavailable. Try again when online.")}
+  finally{$("authSubmit").disabled=false}
+};
+$("authLogout").onclick=async()=>{
+  if(out.length){alert("There are "+out.length+" unsynchronised changes. Wait for cloud sync before logging out.");return}
+  if(!confirm("Log out of Golden Eagle Stores Handover on this device?"))return;
+  appAuthorized=false;authGate(true);
+  if(sb)await sb.auth.signOut();
+  // Clear locally cached workplace records on this device after sign-out.
+  [KEY,TKEY,EKEY,WKEY,PMKEY,SKEY,PKEY,RSEEN,SOUT,SLAST,"parts.cache","pt.cred.v1"].forEach(k=>localStorage.removeItem(k));
+  location.reload();
+};
+
 // ---- cross-device sync (Supabase handover_sync table) ----
 const SOUT="sync.out.v1", SLAST="sync.last.v1";
 let out=JSON.parse(localStorage.getItem(SOUT)||"[]"), lastSync=localStorage.getItem(SLAST)||"";
 let applying=false, flushing=false, pullOk=null;
 const osave=()=>localStorage.setItem(SOUT,JSON.stringify(out));
 function syncUI(){
-  const s=$("sync");if(!sb){s.textContent="";return}
+  const s=$("sync");if(!sb||!appAuthorized){s.textContent="🔒 Login required";return}
   s.textContent=out.length?"⇡ "+out.length+" to sync":pullOk===false?"⚠ sync offline":pullOk?"☁ synced":"";
   s.style.color=out.length||pullOk===false?"#7a2a2a":"#3a6"}
 function qpush(id,kind,value){
@@ -1119,7 +1348,7 @@ function pushDel(id,kind){qpush(id,kind,{deleted:true})}
 function pushPin(u){qpush("pin:"+u,"pin",{hash:pins[u]})}
 function pushShift(){qpush("shift:current","shift",{on:ss.on})}
 async function flush(){
-  if(!sb||flushing||!out.length||!navigator.onLine)return;
+  if(!sb||!appAuthorized||flushing||!out.length||!navigator.onLine)return;
   flushing=true;
   try{while(out.length){
     const b=out.slice(0,50);
@@ -1151,7 +1380,7 @@ function applyRow(r){
   else if(r.kind==="pin"){const u=r.id.slice(4);if(v.hash)pins[u]=v.hash}
   else if(r.kind==="shift")ss.on=Array.isArray(v.on)?v.on:v.cur?[v.cur]:[]}
 async function pull(){
-  if(!sb||!navigator.onLine){syncUI();return}
+  if(!sb||!appAuthorized||!navigator.onLine){syncUI();return}
   const first=!lastSync;
   let q=sb.from("handover_sync").select("id,kind,value,updated_at").order("updated_at",{ascending:true}).limit(1000);
   if(lastSync)q=q.gt("updated_at",lastSync);
@@ -1184,9 +1413,9 @@ async function pull(){
 window.addEventListener("online",()=>{flush();pull()});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
 setInterval(pull,20000);
-pull();flush();syncUI();
-defaults();render();setInterval(render,60000);
-if(!ss.on.length)openLock();
+syncUI();
+// Rendering is gated until the session and authorised-user allowlist are verified.
+bootstrapAuth();
 </script>
 </body>
 </html>
