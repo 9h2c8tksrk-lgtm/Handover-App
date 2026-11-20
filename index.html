@@ -62,6 +62,18 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 #lxcard.lx-danger{background:#7a2a2a}
 #lxcard.lx-danger h2{color:#fff}
 #lxcard small{color:#bbb}
+
+/* Planned Maintenance Window: left of Daily Planner on wide screens */
+#maintenanceCard{width:100%}
+#maintenanceList .entry{overflow-wrap:anywhere}
+@media(min-width:1300px){
+  #maintenanceCard{position:fixed;top:70px;right:calc(50% + 396px);left:16px;
+    width:auto;max-width:360px;max-height:calc(100vh - 90px);overflow-y:auto;z-index:5}
+  /* Keep lightning visible above maintenance instead of overlapping it */
+  #lxcard{position:fixed;top:70px;right:calc(50% + 396px);left:16px;
+    width:auto;max-width:360px;max-height:190px;overflow-y:auto;z-index:6}
+  #maintenanceCard{top:270px;max-height:calc(100vh - 290px)}
+}
 </style>
 </head>
 <body>
@@ -113,8 +125,103 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
     <button type="button" class="sec" id="etamanage" style="padding:5px 10px;font-size:.8rem">Update / tick off</button></h2>
   <div id="etasummary" style="overflow-x:auto"></div>
 </div>
+<div class="tabs" id="warrantyNav" style="margin-bottom:12px">
+  <button type="button" id="wHome" class="active">🏠 Handover</button>
+  <button type="button" id="wOpen">🔧 Warranties</button>
+</div>
 <div id="banner"></div>
 <div id="pending"></div>
+
+<section id="warrantySection" class="card" style="display:none">
+  <h2>🔧 Warranty Register</h2>
+  <form id="warrantyForm">
+    <input type="hidden" id="wEditId">
+    <div class="row"><div><label>Date raised</label><input id="wDate" type="date" required></div>
+      <div><label>Asset number</label><input id="wAsset" placeholder="e.g. PA247"></div></div>
+    <div class="row"><div><label>Work order</label><input id="wWO"></div>
+      <div><label>Supplier</label><input id="wSupplier" required></div></div>
+    <label>Part number</label><input id="wPart" required>
+    <label>Part description</label><input id="wDescription">
+    <label>Reason for warranty</label><textarea id="wReason"></textarea>
+    <div class="row"><div><label>Warranty number</label><input id="wWarrantyNo"></div>
+      <div><label>Claim number</label><input id="wClaimNo"></div></div>
+    <label>Claim status</label><select id="wStatus">
+      <option>Pending</option><option>Awaiting Supplier</option><option>Approved</option>
+      <option>Return Required</option><option>Rejected</option><option>Completed</option>
+    </select>
+    <label class="check"><input type="checkbox" id="wStores"> Returned to Port Hedland Stores</label>
+    <label class="check"><input type="checkbox" id="wSupplierReturn"> Returned to supplier</label>
+    <label>Date returned</label><input id="wReturnedDate" type="date">
+    <label>Resolution</label><select id="wResolution"><option value="">Not resolved</option>
+      <option>Credit received</option><option>Replacement received</option><option>Other</option></select>
+    <label>Notes / follow-up</label><textarea id="wNotes"></textarea>
+    <div class="actions"><button type="submit" id="wSaveButton">Save warranty</button>
+      <button type="button" class="sec" id="wCancel">Clear / cancel edit</button></div>
+  </form>
+  <h2 style="margin-top:18px">Warranty Claims</h2>
+  <label>Show claims</label><select id="wFilter"><option value="open">Outstanding</option>
+    <option value="all">All</option><option>Completed</option><option>Rejected</option></select>
+  <div id="warrantyList"></div>
+</section>
+<div id="wHomeContent">
+
+
+<section class="card" id="maintenanceCard">
+
+  <h2>🔧 Due In Workshop Today</h2>
+
+  <form id="maintenanceForm">
+
+    <input type="hidden" id="pmEdit">
+
+    <label>Vehicle / Asset Number</label>
+    <input
+      id="pmAsset"
+      placeholder="e.g. PA247"
+      required
+    >
+
+    <label>Small Description</label>
+    <input id="pmDescription"
+           placeholder="e.g. Service, inspection, repairs"
+           maxlength="100">
+
+    <label>Date</label>
+    <input
+      type="date"
+      id="pmDate"
+      required
+    >
+
+    <label>Time</label>
+    <input
+      type="time"
+      id="pmTime"
+      required
+    >
+
+    <div class="actions">
+      <button type="submit" id="pmSave">
+        Add
+      </button>
+
+      <button
+        type="button"
+        class="sec"
+        id="pmCancel">
+        Clear
+      </button>
+    </div>
+
+  </form>
+
+  <h2 style="margin-top:16px">
+    Today's Workshop Arrivals
+  </h2>
+
+  <div id="maintenanceList"></div>
+
+</section>
 
 <div class="card" id="plannercard">
   <h2>📋 Day planner – to do &amp; to order</h2>
@@ -168,6 +275,7 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
   <div class="actions"><button class="sec" id="export">Export JSON</button><button class="sec" id="clear">Clear all</button></div>
   <div id="history"></div>
 </div>
+</div><!-- end wHomeContent -->
 </main>
 <script>
 const CREW=["Carl","Declan","Lockie"], KEY="handovers.v1", ME="handover.me";
@@ -268,12 +376,14 @@ function render(){
   $("supview").textContent=supMode?"← Normal view":"👁 Handovers view";
   document.querySelectorAll(".supx").forEach(el=>el.style.display=sup?"":"none");
   $("plannercard").style.display=supMode?"none":"";
+  if(!document.getElementById("warrantySection")||$("warrantySection").style.display==="none")$("maintenanceCard").style.display=supMode?"none":"";
   $("form").style.display=supMode?"none":"";
   $("rosterbox").style.display=supMode?"none":"";
   const p=data.filter(h=>h.to===me&&!h.ack);
   $("pending").innerHTML=p.length?`<div class="card"><h2>⚠ Handovers waiting for ${me} (${p.length})</h2>${p.map(entry).join("")}</div>`:"";
   $("history").innerHTML=data.length?data.map(entry).join(""):"<p>No handovers yet.</p>";
   renderTasks();renderRoster();renderEtas();
+  if($("warrantySection").style.display!=="none")$("etacard").style.display="none";
   $("onshift").textContent=ss.on.length?"👤 "+ss.on.map(c=>c.user+" "+new Date(c.at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})).join(", "):"";
   if(autoSignOff())return;
   $("signoff").style.display=ss.on.length?"":"none";
@@ -625,6 +735,65 @@ lxConnect();lxForecast();
 setInterval(renderLx,60000);
 setInterval(lxForecast,15*60000);
 window.addEventListener("online",lxConnect);
+
+// ---- Personalised welcome greeting ----
+
+function welcomeGreeting(name){
+
+  const hour = new Date().getHours();
+
+  const greeting =
+    hour < 12 ? "Good morning" :
+    hour < 17 ? "Good afternoon" :
+    "Good evening";
+
+  const message =
+    greeting + ", " + name +
+    "... You're looking good today. Did you sleep well?";
+
+  if("speechSynthesis" in window){
+
+    speechSynthesis.cancel();
+
+    const voice = new SpeechSynthesisUtterance(message);
+
+    voice.lang = "en-AU";
+    voice.rate = 0.78;
+    voice.pitch = 1.05;
+    voice.volume = 0.9;
+
+    const voices = speechSynthesis.getVoices();
+
+    const femaleVoice = voices.find(v =>
+      /Natasha|Catherine|Karen|Samantha|Jenny|Aria|Zira/i.test(v.name)
+      && v.lang.startsWith("en")
+    );
+
+    if(femaleVoice){
+      voice.voice = femaleVoice;
+    }
+
+    speechSynthesis.speak(voice);
+  }
+
+  const banner = document.createElement("div");
+
+  banner.className = "card";
+  banner.style.background = "#2c5138";
+  banner.style.textAlign = "center";
+
+  const title = document.createElement("h2");
+
+  title.textContent =
+    "👋 Welcome to the Golden Eagle Stores Handover";
+
+  banner.appendChild(title);
+
+  document.getElementById("pending").prepend(banner);
+
+  setTimeout(() => banner.remove(), 8000);
+}
+
 // ---- sign on / off ----
 const SKEY="shift.v1", PKEY="pins.v1";
 let ss=JSON.parse(localStorage.getItem(SKEY)||'{"on":[],"log":[]}');
@@ -678,7 +847,260 @@ $("lockform").onsubmit=async e=>{
   const rost=whoOn(parseD(shiftDate()),currentShift());
   if(rost!==u&&!ss.on.some(c=>c.user===rost)&&!confirm(`${rost} is rostered on this ${currentShift().toLowerCase()} shift, not ${u}. Sign on anyway (covering)?`))return;
   if(!ss.on.some(c=>c.user===u))ss.on.push({user:u,at:new Date().toISOString(),shiftKey:here()});
-  ssave();pushShift();$("lock").style.display="none";defaults();render();ptAutoSignIn()};
+  ssave();pushShift();$("lock").style.display="none";defaults();render();welcomeGreeting(u);ptAutoSignIn()};
+// ---- Warranty register (uses existing Supabase sync queue) ----
+const WKEY="warranties.v1";
+let warranties=JSON.parse(localStorage.getItem(WKEY)||"[]");
+const wsave=()=>localStorage.setItem(WKEY,JSON.stringify(warranties));
+function pushW(w){qpush("warranty:"+w.id,"warranty",w)}
+const warrantyFields={date:"wDate",asset:"wAsset",wo:"wWO",supplier:"wSupplier",
+  part:"wPart",description:"wDescription",reason:"wReason",warrantyNo:"wWarrantyNo",
+  claimNo:"wClaimNo",status:"wStatus",returnedDate:"wReturnedDate",
+  resolution:"wResolution",notes:"wNotes"};
+function clearWarranty(){
+  $("warrantyForm").reset();$("wEditId").value="";
+  $("wDate").value=fmtD(new Date());$("wSaveButton").textContent="Save warranty";
+}
+function showWarrantyPage(show){
+  $("maintenanceCard").style.display=show?"none":"";
+  $("warrantySection").style.display=show?"":"none";
+  $("wHomeContent").style.display=show?"none":"";
+  $("wOpen").classList.toggle("active",show);
+  $("wHome").classList.toggle("active",!show);
+  // Hide floating special orders while the warranty register is open.
+  if(show)$("etacard").style.display="none";
+  else renderEtaSummary();
+  if(show)renderWarranties();
+}
+$("wOpen").onclick=()=>showWarrantyPage(true);
+$("wHome").onclick=()=>showWarrantyPage(false);
+$("wCancel").onclick=clearWarranty;
+$("wFilter").onchange=renderWarranties;
+$("warrantyForm").onsubmit=e=>{
+  e.preventDefault();
+  const id=$("wEditId").value;
+  const old=warranties.find(w=>String(w.id)===id);
+  const w={...(old||{}),id:old?old.id:Date.now(),
+    by:old?old.by:$("from").value,updatedBy:$("from").value,
+    updatedAt:new Date().toISOString()};
+  Object.entries(warrantyFields).forEach(([key,field])=>w[key]=$(field).value.trim());
+  w.returnedToStores=$("wStores").checked;
+  w.returnedToSupplier=$("wSupplierReturn").checked;
+  if(old)warranties=warranties.map(x=>x.id===old.id?w:x);
+  else warranties.push(w);
+  wsave();pushW(w);clearWarranty();renderWarranties();
+};
+function renderWarranties(){
+  const filter=$("wFilter").value;
+  const list=warranties.filter(w=>filter==="all"||
+    (filter==="open"?!["Completed","Rejected"].includes(w.status):w.status===filter))
+    .sort((a,b)=>String(b.updatedAt||b.id).localeCompare(String(a.updatedAt||a.id)));
+  $("warrantyList").innerHTML=list.map(w=>`<div class="entry">
+    <b>${esc(String(w.part||""))} • ${esc(String(w.asset||""))}</b><br>
+    <small>${esc(String(w.supplier||""))} • ${esc(String(w.date||""))} • ${esc(String(w.status||""))}</small>
+    <pre>WO: ${esc(String(w.wo||""))}
+Description: ${esc(String(w.description||""))}
+Reason: ${esc(String(w.reason||""))}
+Warranty no: ${esc(String(w.warrantyNo||""))}
+Claim no: ${esc(String(w.claimNo||""))}
+Port Hedland Stores: ${w.returnedToStores?"Returned":"Not returned"}
+Supplier: ${w.returnedToSupplier?"Returned":"Not returned"}
+Date returned: ${esc(String(w.returnedDate||""))}
+Resolution: ${esc(String(w.resolution||""))}
+Notes: ${esc(String(w.notes||""))}
+Raised by: ${esc(String(w.by||""))}</pre>
+    <div class="actions"><button type="button" data-wedit="${w.id}">Edit</button>
+    <button type="button" class="sec" data-wdel="${w.id}">Delete</button></div></div>`).join("")
+    ||"<p>No matching warranty claims.</p>";
+}
+document.addEventListener("click",e=>{
+  const id=e.target.dataset.wedit||e.target.dataset.wdel;
+  if(!id)return;
+  const w=warranties.find(x=>String(x.id)===id);
+  if(!w)return;
+  if(e.target.dataset.wdel){
+    if(!confirm("Delete this warranty claim?"))return;
+    warranties=warranties.filter(x=>String(x.id)!==id);
+    wsave();pushDel("warranty:"+id,"warranty");renderWarranties();return;
+  }
+  $("wEditId").value=w.id;
+  Object.entries(warrantyFields).forEach(([key,field])=>$(field).value=w[key]||"");
+  $("wStores").checked=!!w.returnedToStores;
+  $("wSupplierReturn").checked=!!w.returnedToSupplier;
+  $("wSaveButton").textContent="Update warranty";
+  $("warrantyForm").scrollIntoView({behavior:"smooth"});
+});
+clearWarranty();
+
+// ---- Planned Maintenance Window: existing handover_sync queue ----
+const PMKEY="maintenance.v1";
+let maintenance=JSON.parse(localStorage.getItem(PMKEY)||"[]");
+const pmSaveLocal=()=>localStorage.setItem(PMKEY,JSON.stringify(maintenance));
+const pushPM=m=>qpush("maintenance:"+m.id,"maintenance",m);
+
+function pmToday(){
+  return fmtD(new Date());
+}
+
+function pmClear(){
+  $("maintenanceForm").reset();
+  $("pmEdit").value = "";
+  $("pmDate").value = pmToday();
+  $("pmSave").textContent = "Add";
+}
+
+function pmEntryDate(m){
+  return m.date || (m.start || "").slice(0,10);
+}
+
+function pmEntryTime(m){
+  return m.time || (m.start || "").slice(11,16);
+}
+
+function renderMaintenance(){
+
+  const today = pmToday();
+
+  const arrivals = maintenance
+    .filter(m => pmEntryDate(m) === today)
+    .sort((a,b) =>
+      pmEntryTime(a).localeCompare(pmEntryTime(b))
+    );
+
+  const list = $("maintenanceList");
+  list.replaceChildren();
+
+  if(!arrivals.length){
+    list.textContent =
+      "No vehicles due in workshop today.";
+    return;
+  }
+
+  arrivals.forEach(m => {
+
+    const box = document.createElement("div");
+    box.className = "entry";
+
+    const title = document.createElement("b");
+    title.textContent = m.asset;
+
+    const time = document.createElement("p");
+    time.textContent =
+      "Arrival: " + pmEntryTime(m);
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.textContent = "Edit";
+
+    edit.onclick = () => {
+
+      $("pmEdit").value = m.id;
+      $("pmAsset").value = m.asset;
+      $("pmDescription").value = m.description || "";
+      $("pmDate").value = pmEntryDate(m);
+      $("pmTime").value = pmEntryTime(m);
+
+      $("pmSave").textContent = "Update";
+
+      $("maintenanceForm").scrollIntoView({
+        behavior:"smooth"
+      });
+
+    };
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "sec";
+    del.textContent = "Delete";
+
+    del.onclick = () => {
+
+      if(!confirm("Delete this workshop arrival?"))
+        return;
+
+      maintenance = maintenance.filter(
+        x => String(x.id) !== String(m.id)
+      );
+
+      pmSaveLocal();
+
+      pushDel(
+        "maintenance:" + m.id,
+        "maintenance"
+      );
+
+      renderMaintenance();
+
+    };
+
+    if(m.description){
+      const description = document.createElement("p");
+      description.textContent = m.description;
+      box.appendChild(description);
+    }
+
+    actions.append(edit,del);
+    box.append(title,time,actions);
+    list.appendChild(box);
+
+  });
+
+}
+
+$("maintenanceForm").onsubmit = e => {
+
+  e.preventDefault();
+
+  const id = $("pmEdit").value;
+
+  const old = maintenance.find(
+    m => String(m.id) === id
+  );
+
+  const m = {
+
+    id: old ? old.id : Date.now(),
+
+    asset: $("pmAsset").value.trim(),
+    description: $("pmDescription").value.trim(),
+
+    date: $("pmDate").value,
+
+    time: $("pmTime").value,
+
+    by: old ? old.by : $("from").value,
+
+    updatedAt: new Date().toISOString()
+
+  };
+
+  if(old){
+
+    maintenance = maintenance.map(
+      x => x.id === old.id ? m : x
+    );
+
+  }else{
+
+    maintenance.push(m);
+
+  }
+
+  pmSaveLocal();
+  pushPM(m);
+
+  pmClear();
+  renderMaintenance();
+
+};
+
+$("pmCancel").onclick = pmClear;
+
+renderMaintenance();
+
 // ---- cross-device sync (Supabase handover_sync table) ----
 const SOUT="sync.out.v1", SLAST="sync.last.v1";
 let out=JSON.parse(localStorage.getItem(SOUT)||"[]"), lastSync=localStorage.getItem(SLAST)||"";
@@ -718,6 +1140,14 @@ function applyRow(r){
   else if(r.kind==="eta"){const id=+r.id.slice(4);
     etas=etas.filter(x=>x.id!==id);
     if(!v.deleted)etas.push(v)}
+  else if(r.kind==="warranty"){
+    const id=r.id.slice(9);
+    warranties=warranties.filter(w=>String(w.id)!==id);
+    if(!v.deleted)warranties.push(v)}
+  else if(r.kind==="maintenance"){
+    const id=r.id.slice(12);
+    maintenance=maintenance.filter(m=>String(m.id)!==id);
+    if(!v.deleted)maintenance.push(v)}
   else if(r.kind==="pin"){const u=r.id.slice(4);if(v.hash)pins[u]=v.hash}
   else if(r.kind==="shift")ss.on=Array.isArray(v.on)?v.on:v.cur?[v.cur]:[]}
 async function pull(){
@@ -741,14 +1171,16 @@ async function pull(){
     data.forEach(h=>{if(!seen.has("handover:"+h.id))pushH(h)});
     tasks.forEach(t=>{if(!seen.has("task:"+t.id))pushT(t)});
     etas.forEach(x=>{if(!seen.has("eta:"+x.id))pushE(x)});
+    warranties.forEach(w=>{if(!seen.has("warranty:"+w.id))pushW(w)});
+    maintenance.forEach(m=>{if(!seen.has("maintenance:"+m.id))pushPM(m)});
     Object.keys(pins).forEach(u=>{if(!seen.has("pin:"+u))pushPin(u)});
     if(ss.on.length&&!seen.has("shift:current"))pushShift()}
   if(!rows.length){if(!synced){synced=true;render()}syncUI();return}
-  save();tsave();esave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
+  save();tsave();esave();pmSaveLocal();wsave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
   if(JSON.stringify(ss.on)!==prevCur){ // signed on/off from another device
     if(!ss.on.length&&$("lock").style.display!=="flex")openLock();
     else if($("lock").style.display==="flex")openLock(lockOff&&ss.on.length?true:false)}
-  synced=true;render();flush();syncUI()}
+  synced=true;render();renderWarranties();renderMaintenance();flush();syncUI()}
 window.addEventListener("online",()=>{flush();pull()});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
 setInterval(pull,20000);
