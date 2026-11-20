@@ -275,12 +275,26 @@ function render(){
   $("history").innerHTML=data.length?data.map(entry).join(""):"<p>No handovers yet.</p>";
   renderTasks();renderRoster();renderEtas();
   $("onshift").textContent=ss.on.length?"👤 "+ss.on.map(c=>c.user+" "+new Date(c.at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})).join(", "):"";
+  if(autoSignOff())return;
   $("signoff").style.display=ss.on.length?"":"none";
   $("signon").style.display=ss.on.length?"":"none";
   const stale=ss.on.filter(c=>c.shiftKey!==here());
   $("banner").innerHTML=stale.length?`<div class="card"><h2 style="color:#fff">⏰ Shift change – ${stale.map(c=>c.user).join(", ")} ${stale.length>1?"are":"is"} still signed on from ${stale[0].shiftKey}</h2><p>Finish the handover and sign off, then the incoming person signs on.</p><button id="bsign">Sign on for ${here()}</button></div>`:"";
   $("now").textContent=currentShift()+" shift • "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
 }
+// Signed off automatically once 1 hour past the end of the shift they signed on to (Day ends 17:00, Night ends 05:00)
+function autoSignOff(){
+  const now=Date.now(),keep=[],gone=[];
+  ss.on.forEach(c=>{
+    const m=/^(Day|Night) (\d+)-(\d+)-(\d+)$/.exec(c.shiftKey||"");
+    if(!m)return keep.push(c);
+    const end=m[1]==="Day"?new Date(+m[2],m[3]-1,+m[4],17):new Date(+m[2],m[3]-1,+m[4]+1,5);
+    (now>end.getTime()+36e5?gone:keep).push(c)});
+  if(!gone.length)return false;
+  gone.forEach(c=>{c.off=new Date().toISOString();c.auto=true;ss.log.push(c)});
+  ss.on=keep;ssave();pushShift();render();
+  if(!ss.on.length)openLock();
+  return true}
 const here=()=>currentShift()+" "+shiftDate();
 $("supview").onclick=()=>{supMode=!supMode;render();window.scrollTo(0,0)};
 // ---- recurring weekly tasks (dow: 0=Sun..6=Sat) ----
@@ -295,7 +309,9 @@ const RECUR=[
 ];
 const RSEEN="recur.seen.v1";
 let rseen=JSON.parse(localStorage.getItem(RSEEN)||"[]").filter(id=>Date.now()-id<30*864e5);
+let synced=false; // don't spawn until we've seen the server's copies, or a stale device overwrites ticked-off tasks
 function spawnRecurring(){
+  if(sb&&navigator.onLine&&!synced)return;
   const date=shiftDate(),sh=currentShift(),dow=parseD(date).getDay();
   let added=false;
   RECUR.forEach((r,i)=>{
@@ -342,7 +358,15 @@ $("tform").onsubmit=e=>{e.preventDefault();
 document.addEventListener("click",e=>{
   if(e.target.dataset.ttab){ttab=e.target.dataset.ttab;renderTasks();return}
   if(e.target.dataset.twork){const t=tasks.find(x=>x.id==e.target.dataset.twork);if(!t)return;
-    const me=$("from").value;
+    let me=$("from").value;
+    if(ss.on.length>1){
+      const names=ss.on.map(c=>c.user);
+      const pick=prompt("Who is on it? Signed on: "+names.join(", "),names.includes(me)?me:names[0]);
+      if(pick===null)return;
+      const m=names.find(n=>n.toLowerCase()===pick.trim().toLowerCase());
+      if(!m){alert("Pick one of the people signed on: "+names.join(", "));return}
+      me=m}
+    else if(ss.on.length===1)me=ss.on[0].user;
     if(t.workingBy===me)t.workingBy=null;
     else{if(t.workingBy&&!confirm(t.workingBy+" is already on this – take over?"))return;t.workingBy=me}
     tsave();pushT(t);render();return}
@@ -688,6 +712,7 @@ function applyRow(r){
     if(!v.deleted){data.push(v);data.sort((a,b)=>b.id-a.id)}}
   else if(r.kind==="task"){const id=+r.id.slice(5);
     tasks=tasks.filter(t=>t.id!==id);
+    if(v.recur&&!rseen.includes(id)){rseen.push(id);localStorage.setItem(RSEEN,JSON.stringify(rseen))}
     if(!v.deleted){tasks.push(v);tasks.sort((a,b)=>a.id-b.id)}
     else if(!rseen.includes(id)){rseen.push(id);localStorage.setItem(RSEEN,JSON.stringify(rseen))}}
   else if(r.kind==="eta"){const id=+r.id.slice(4);
@@ -703,6 +728,9 @@ async function pull(){
   const {data:rows,error}=await q;
   if(error){pullOk=false;syncUI();return}
   pullOk=true;
+  // a ticked-off recurring task on the server beats a stale unticked copy still queued here
+  rows.forEach(r=>{if(r.kind==="task"&&r.value&&r.value.recur&&r.value.done){
+    const i=out.findIndex(o=>o.id===r.id&&o.value&&!o.value.done);if(i>=0){out.splice(i,1);osave()}}});
   const pend=new Set(out.map(o=>o.id)), seen=new Set(), prevCur=JSON.stringify(ss.on);
   applying=true;
   for(const r of rows){seen.add(r.id);lastSync=r.updated_at;if(!pend.has(r.id))applyRow(r)}
@@ -715,12 +743,12 @@ async function pull(){
     etas.forEach(x=>{if(!seen.has("eta:"+x.id))pushE(x)});
     Object.keys(pins).forEach(u=>{if(!seen.has("pin:"+u))pushPin(u)});
     if(ss.on.length&&!seen.has("shift:current"))pushShift()}
-  if(!rows.length){syncUI();return}
+  if(!rows.length){if(!synced){synced=true;render()}syncUI();return}
   save();tsave();esave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
   if(JSON.stringify(ss.on)!==prevCur){ // signed on/off from another device
     if(!ss.on.length&&$("lock").style.display!=="flex")openLock();
     else if($("lock").style.display==="flex")openLock(lockOff&&ss.on.length?true:false)}
-  render();flush();syncUI()}
+  synced=true;render();flush();syncUI()}
 window.addEventListener("online",()=>{flush();pull()});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
 setInterval(pull,20000);
