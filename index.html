@@ -82,6 +82,17 @@ body.auth-locked > :not(#authGate){display:none!important}
 #authGate p{font-size:.9rem;color:#c7cbd0}
 #authGate #authError{color:#ff9292;min-height:1.4em}
 #authLogout{display:none}
+
+  /* Sign-on daily briefing */
+  #dailyBriefing{position:fixed;inset:0;background:#000d;z-index:30;display:none;align-items:center;justify-content:center;padding:12px}
+  #dailyBriefing .card{width:100%;max-width:650px;max-height:92vh;overflow:auto;border:1px solid #e8a317}
+  #dailyBriefing .brief-section{margin:12px 0;padding:10px;background:#1b1f24;border-radius:8px}
+  #dailyBriefing .brief-section h3{margin:0 0 8px;font-size:1rem;color:#e8a317}
+  #dailyBriefing .brief-item{padding:7px 0;border-top:1px solid #414850;overflow-wrap:anywhere}
+  #dailyBriefing .brief-item:first-of-type{border-top:0}
+  #dailyBriefing .brief-ok{color:#6bd68a}
+  #dailyBriefing .brief-alert{color:#ff9292}
+  #dailyBriefing .brief-note{font-size:.8rem;color:#bbb}
 </style>
 </head>
 <body class="auth-locked">
@@ -97,6 +108,20 @@ body.auth-locked > :not(#authGate){display:none!important}
   </form>
 </div>
 <header><h1>🔧 Shift Handover</h1><div id="who"><span id="sync" style="font-size:.8rem"></span><span id="now"></span><span id="onshift"></span><button id="supview" class="sec" style="display:none">👁 Handovers view</button><button id="authLogout" class="sec" type="button">🔒 Log out</button><button id="signon" class="sec">Sign on</button><button id="signoff" class="sec">Sign off</button></div></header>
+
+  <div id="dailyBriefing" role="dialog" aria-modal="true" aria-labelledby="briefTitle">
+    <div class="card">
+      <h2 id="briefTitle">☀️ Your Workshop Daily Briefing</h2>
+      <p id="briefGreeting"></p>
+      <p id="briefSyncNote" class="brief-note" role="status"></p>
+      <div id="briefDetails" aria-live="polite"></div>
+      <p id="briefAffirmation" class="brief-ok"></p>
+      <div class="actions">
+        <button type="button" id="briefReplay" class="sec">🔊 Hear briefing again</button>
+        <button type="button" id="briefContinue">Continue to handover</button>
+      </div>
+    </div>
+  </div>
 <div id="scanbox"><div class="card">
   <h2>Scan parts to order</h2>
   <div id="reader"></div>
@@ -805,64 +830,92 @@ setInterval(renderLx,60000);
 setInterval(lxForecast,15*60000);
 window.addEventListener("online",lxConnect);
 
-// ---- Personalised welcome greeting ----
-
-function welcomeGreeting(name){
-
-  const hour = new Date().getHours();
-
-  const greeting =
-    hour < 12 ? "Good morning" :
-    hour < 17 ? "Good afternoon" :
-    "Good evening";
-
-  const message =
-    greeting + ", " + name +
-    "... You're looking good today. Did you sleep well?";
-
-  if("speechSynthesis" in window){
-
-    speechSynthesis.cancel();
-
-    const voice = new SpeechSynthesisUtterance(message);
-
-    voice.lang = "en-AU";
-    voice.rate = 0.78;
-    voice.pitch = 1.05;
-    voice.volume = 0.9;
-
-    const voices = speechSynthesis.getVoices();
-
-    const femaleVoice = voices.find(v =>
-      /Natasha|Catherine|Karen|Samantha|Jenny|Aria|Zira/i.test(v.name)
-      && v.lang.startsWith("en")
-    );
-
-    if(femaleVoice){
-      voice.voice = femaleVoice;
-    }
-
-    speechSynthesis.speak(voice);
+  // ---- Sign-on workshop briefing: uses existing synced maintenance, ETA and warranty records ----
+  const AFFIRMATIONS=[
+    "Every great shift starts with a positive attitude.",
+    "Stay focused, stay organised, and make today count.",
+    "Your hard work makes a difference every day.",
+    "Small improvements lead to big results.",
+    "Another shift, another opportunity to achieve something great.",
+    "You've got this. Let's make today productive.",
+    "Success comes from teamwork, consistency and determination.",
+    "One task at a time. You've got what it takes.",
+    "Bring your best energy and make this a safe, successful shift.",
+    "Keep moving forward. Progress is built one step at a time."
+  ];
+  let briefSpeech="";
+  function nextAffirmation(){
+    let previous=-1;
+    try{previous=Number(sessionStorage.getItem("handover.lastAffirmation"));}catch{}
+    let choice=Math.floor(Math.random()*(AFFIRMATIONS.length-1));
+    if(previous>=0&&previous<AFFIRMATIONS.length&&choice>=previous)choice++;
+    try{sessionStorage.setItem("handover.lastAffirmation",String(choice));}catch{}
+    return AFFIRMATIONS[choice];
   }
-
-  const banner = document.createElement("div");
-
-  banner.className = "card";
-  banner.style.background = "#2c5138";
-  banner.style.textAlign = "center";
-
-  const title = document.createElement("h2");
-
-  title.textContent =
-    "👋 Welcome to the Golden Eagle Stores Handover";
-
-  banner.appendChild(title);
-
-  document.getElementById("pending").prepend(banner);
-
-  setTimeout(() => banner.remove(), 8000);
-}
-
+  function briefSay(message){
+    if(!("speechSynthesis" in window)||lxAlertOn)return;
+    try{
+      speechSynthesis.cancel();
+      const voice=new SpeechSynthesisUtterance(message);
+      voice.lang="en-AU";voice.rate=0.84;voice.pitch=1.05;voice.volume=0.9;
+      const voices=speechSynthesis.getVoices();
+      const preferred=voices.find(v=>/Natasha|Catherine|Karen|Samantha|Jenny|Aria|Zira/i.test(v.name)&&v.lang.startsWith("en"));
+      if(preferred)voice.voice=preferred;
+      speechSynthesis.speak(voice);
+    }catch{}
+  }
+  function showDailyBriefing(name){
+    const today=fmtD(new Date());
+    const arrivals=maintenance.filter(m=>pmEntryDate(m)===today)
+      .sort((a,b)=>pmEntryTime(a).localeCompare(pmEntryTime(b)));
+    const overdue=etas.filter(x=>!x.delivered&&x.eta&&x.eta<today)
+      .sort((a,b)=>a.eta.localeCompare(b.eta));
+    const outstanding=warranties.filter(w=>!["Completed","Rejected"].includes(w.status));
+    const hour=new Date().getHours();
+    const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
+    const affirmation=nextAffirmation();
+    $("briefGreeting").textContent=greeting+", "+name+"! Here's your shift briefing for "+new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"})+".";
+    $("briefAffirmation").textContent="✨ "+affirmation;
+    $("briefSyncNote").textContent=pullOk===false||!navigator.onLine
+      ?"⚠ Cloud sync is unavailable. These records may be out of date."
+      :out.length?"⚠ Some local changes are still waiting to sync.":"Based on the current handover records.";
+    const details=$("briefDetails");details.replaceChildren();
+    function section(title,items,empty,describe){
+      const box=document.createElement("section");box.className="brief-section";
+      const heading=document.createElement("h3");heading.textContent=title+" ("+items.length+")";box.appendChild(heading);
+      if(!items.length){const p=document.createElement("p");p.className="brief-ok";p.textContent="✅ "+empty;box.appendChild(p)}
+      else items.forEach(item=>{
+        const row=document.createElement("div");row.className="brief-item";
+        row.textContent=describe(item);box.appendChild(row);
+      });
+      details.appendChild(box);
+    }
+    section("🚜 Assets due in workshop today",arrivals,"No assets scheduled today.",
+      m=>(m.asset||"Unknown asset")+" • "+(pmEntryTime(m)||"Time not set")+(m.description?" • "+m.description:""));
+    section("📦 Overdue special orders",overdue,"No overdue special orders.",x=>{
+      const days=Math.round((parseD(today)-parseD(x.eta))/864e5);
+      return (x.part||"Unknown part")+(x.desc?" • "+x.desc:"")+(x.asset?" • Asset "+x.asset:"")+
+        (x.wo?" • WO "+x.wo:"")+" • ETA "+x.eta+" • "+days+" day"+(days===1?"":"s")+" overdue";
+    });
+    section("🛡️ Outstanding warranty claims",outstanding,"No outstanding warranty claims.",w=>
+      (w.claimNo?"Claim "+w.claimNo:"Claim number not entered")+
+      (w.asset?" • Asset "+w.asset:"")+(w.part?" • Part "+w.part:"")+
+      (w.description?" • "+w.description:"")+" • "+(w.status||"Status not entered")+
+      (w.date?" • Raised "+w.date:""));
+    briefSpeech=greeting+", "+name+". Welcome back. "+
+      (arrivals.length?"You have "+arrivals.length+" asset"+(arrivals.length===1?"":"s")+" due in the workshop today. ":"No assets are scheduled in the workshop today. ")+
+      (overdue.length?"There are "+overdue.length+" overdue special order"+(overdue.length===1?"":"s")+". ":"There are no overdue special orders. ")+
+      (outstanding.length?"You have "+outstanding.length+" outstanding warranty claim"+(outstanding.length===1?"":"s")+". ":"There are no outstanding warranty claims. ")+
+      affirmation;
+    $("dailyBriefing").style.display="flex";
+    $("briefContinue").focus();
+    briefSay(briefSpeech);
+  }
+  $("briefReplay").onclick=()=>briefSay(briefSpeech);
+  $("briefContinue").onclick=()=>{
+    $("dailyBriefing").style.display="none";
+    if(!lxAlertOn&&"speechSynthesis" in window)speechSynthesis.cancel();
+  };
 // ---- sign on / off ----
 const SKEY="shift.v1", PKEY="pins.v1";
 let ss=JSON.parse(localStorage.getItem(SKEY)||'{"on":[],"log":[]}');
@@ -916,7 +969,7 @@ $("lockform").onsubmit=async e=>{
   const rost=whoOn(parseD(shiftDate()),currentShift());
   if(rost!==u&&!ss.on.some(c=>c.user===rost)&&!confirm(`${rost} is rostered on this ${currentShift().toLowerCase()} shift, not ${u}. Sign on anyway (covering)?`))return;
   if(!ss.on.some(c=>c.user===u))ss.on.push({user:u,at:new Date().toISOString(),shiftKey:here()});
-  ssave();pushShift();$("lock").style.display="none";defaults();render();welcomeGreeting(u)};
+  ssave();pushShift();$("lock").style.display="none";defaults();render();showDailyBriefing(u)};
 // ---- Warranty register (uses existing Supabase sync queue) ----
 const WKEY="warranties.v1";
 let warranties=JSON.parse(localStorage.getItem(WKEY)||"[]");
