@@ -93,7 +93,15 @@ body.auth-locked > :not(#authGate){display:none!important}
   #dailyBriefing .brief-ok{color:#6bd68a}
   #dailyBriefing .brief-alert{color:#ff9292}
   #dailyBriefing .brief-note{font-size:.8rem;color:#bbb}
-</style>
+  .service-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px}
+  .service-grid label{margin:0}
+  .service-grid input,.service-grid select{margin-top:5px}
+  .pick-line{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px solid #444;padding:9px 0}
+  .pick-line select{width:auto;min-width:145px;margin-left:auto}
+  .pick-line .part-info{flex:1;min-width:175px}
+  .service-hint{color:#b9c1c9;font-size:.85rem}
+  @media print{body *{visibility:hidden!important}#printPicking,#printPicking *{visibility:visible!important}#printPicking{position:absolute;left:0;top:0;width:100%;color:#000;background:#fff;padding:20px}#printPicking button{display:none}}
+  </style>
 </head>
 <body class="auth-locked">
 <div id="authGate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -169,9 +177,10 @@ body.auth-locked > :not(#authGate){display:none!important}
     <button type="button" class="sec" id="etamanage" style="padding:5px 10px;font-size:.8rem">Update / tick off</button></h2>
   <div id="etasummary" style="overflow-x:auto"></div>
 </div>
-<div class="tabs" id="warrantyNav" style="margin-bottom:12px">
+  <div class="tabs" id="warrantyNav" style="margin-bottom:12px">
   <button type="button" id="wHome" class="active">🏠 Handover</button>
-  <button type="button" id="wOpen">🔧 Warranties</button>
+      <button type="button" id="wOpen">🔧 Warranties</button>
+    <button type="button" id="serviceNav">🔩 Service Parts</button>
 </div>
 <div id="banner"></div>
 <div id="pending"></div>
@@ -269,7 +278,32 @@ body.auth-locked > :not(#authGate){display:none!important}
     <option value="all">All</option><option>Completed</option><option>Rejected</option></select>
   <div id="warrantyList"></div>
 </section>
-<div id="wHomeContent">
+  <section id="serviceSection" class="card" style="display:none">
+    <h2>🔩 Service Parts Register</h2>
+    <p class="service-hint">Register assets by model, then create reusable service kits for that model. Kit part numbers and quantities must be checked against approved service documentation.</p>
+    <h2>1. Asset Register</h2>
+    <form id="assetRegisterForm" class="service-grid">
+      <label>Asset number<input id="arNumber" required placeholder="e.g. DT105"></label>
+      <label>Truck / equipment model<input id="arModel" required placeholder="e.g. CAT 777"></label>
+      <button type="submit">Save asset</button>
+    </form>
+    <div id="assetRegisterList"></div>
+    <h2 style="margin-top:22px">2. Service Kit Templates</h2>
+    <form id="kitForm">
+      <input type="hidden" id="kitEdit">
+      <div class="service-grid">
+        <label>Model<input id="kitModel" list="serviceModels" required placeholder="e.g. CAT 777"></label>
+        <label>Service type<input id="kitService" required placeholder="e.g. 500 Hour"></label>
+      </div>
+      <datalist id="serviceModels"></datalist>
+      <label>Parts (one per line: part number | description | quantity)</label>
+      <textarea id="kitLines" rows="6" required placeholder="PART-001 | Oil filter | 2&#10;PART-002 | Fuel filter | 1"></textarea>
+      <p class="service-hint">Use real approved part numbers. Separate columns with |. Quantities must be greater than zero.</p>
+      <div class="actions"><button type="submit">Save service kit</button><button type="button" class="sec" id="kitClear">Clear</button></div>
+    </form>
+    <div id="kitList"></div>
+  </section>
+  <div id="wHomeContent">
 
 
 <section class="card" id="maintenanceCard">
@@ -287,7 +321,12 @@ body.auth-locked > :not(#authGate){display:none!important}
       required
     >
 
-    <label>Small Description</label>
+          <div class="service-grid">
+        <label>Truck / equipment model<input id="pmModel" list="serviceModels" placeholder="Auto-filled from asset register"></label>
+        <label>Service due<select id="pmService"><option value="">No service selected</option></select></label>
+      </div>
+      <p id="pmKitHint" class="service-hint">Enter an asset number to find its model and available service kits.</p>
+      <label>Small Description</label>
     <input id="pmDescription"
            placeholder="e.g. Service, inspection, repairs"
            maxlength="100">
@@ -325,7 +364,8 @@ body.auth-locked > :not(#authGate){display:none!important}
     Today's Workshop Arrivals
   </h2>
 
-  <div id="maintenanceList"></div>
+      <div id="maintenanceList"></div>
+    <div id="printPicking" style="display:none"></div>
 
 </section>
 
@@ -892,7 +932,11 @@ window.addEventListener("online",lxConnect);
     }
     section("🚜 Assets due in workshop today",arrivals,"No assets scheduled today.",
       m=>(m.asset||"Unknown asset")+" • "+(pmEntryTime(m)||"Time not set")+(m.description?" • "+m.description:""));
-    section("📦 Overdue special orders",overdue,"No overdue special orders.",x=>{
+          section("🔩 Service parts to prepare",arrivals.filter(m=>m.service),"No service kits assigned to today's arrivals.",m=>{
+        const pending=(m.pickParts||[]).filter(p=>p.status!=="Picked");
+        return m.asset+" • "+m.service+" • "+(pending.length?pending.map(p=>p.part+" qty "+p.qty+" ("+(p.status||"Not Picked")+")").join("; "):"All parts picked");
+      });
+      section("📦 Overdue special orders",overdue,"No overdue special orders.",x=>{
       const days=Math.round((parseD(today)-parseD(x.eta))/864e5);
       return (x.part||"Unknown part")+(x.desc?" • "+x.desc:"")+(x.asset?" • Asset "+x.asset:"")+
         (x.wo?" • WO "+x.wo:"")+" • ETA "+x.eta+" • "+days+" day"+(days===1?"":"s")+" overdue";
@@ -902,9 +946,11 @@ window.addEventListener("online",lxConnect);
       (w.asset?" • Asset "+w.asset:"")+(w.part?" • Part "+w.part:"")+
       (w.description?" • "+w.description:"")+" • "+(w.status||"Status not entered")+
       (w.date?" • Raised "+w.date:""));
-    briefSpeech=greeting+", "+name+". Welcome back. "+
+          const unpicked=arrivals.reduce((n,m)=>n+(m.pickParts||[]).filter(p=>p.status!=="Picked").length,0);
+      briefSpeech=greeting+", "+name+". Welcome back. "+
       (arrivals.length?"You have "+arrivals.length+" asset"+(arrivals.length===1?"":"s")+" due in the workshop today. ":"No assets are scheduled in the workshop today. ")+
-      (overdue.length?"There are "+overdue.length+" overdue special order"+(overdue.length===1?"":"s")+". ":"There are no overdue special orders. ")+
+              (unpicked?"There are "+unpicked+" service parts lines still to prepare. ":"No service parts remain to be picked for today's booked services. ")+
+        (overdue.length?"There are "+overdue.length+" overdue special order"+(overdue.length===1?"":"s")+". ":"There are no overdue special orders. ")+
       (outstanding.length?"You have "+outstanding.length+" outstanding warranty claim"+(outstanding.length===1?"":"s")+". ":"There are no outstanding warranty claims. ")+
       affirmation;
     $("dailyBriefing").style.display="flex";
@@ -1138,6 +1184,104 @@ document.addEventListener("click",e=>{
 });
 clearWarranty();
 
+// ---- Asset models and reusable service kits, synced via handover_sync ----
+const ARKEY="service.assets.v1", KITKEY="service.kits.v1";
+let assetModels=JSON.parse(localStorage.getItem(ARKEY)||"[]");
+let serviceKits=JSON.parse(localStorage.getItem(KITKEY)||"[]");
+const saveAssets=()=>localStorage.setItem(ARKEY,JSON.stringify(assetModels));
+const saveKits=()=>localStorage.setItem(KITKEY,JSON.stringify(serviceKits));
+const norm=s=>String(s||"").trim().toUpperCase();
+function kitFor(model,service){return serviceKits.find(k=>norm(k.model)===norm(model)&&norm(k.service)===norm(service))}
+function fillServiceChoices(selected=""){
+  const model=$("pmModel").value, el=$("pmService");
+  const choices=serviceKits.filter(k=>norm(k.model)===norm(model));
+  el.replaceChildren(new Option("No service selected",""));
+  choices.sort((a,b)=>a.service.localeCompare(b.service)).forEach(k=>el.add(new Option(k.service,k.service)));
+  if(selected)el.value=selected;
+  $("pmKitHint").textContent=choices.length
+    ?"Select a service to generate the parts picking list ("+choices.length+" kits available)."
+    :"No service kit for this model yet. Create one in Service Parts Register.";
+}
+function updateAssetModel(){
+  const asset=assetModels.find(a=>norm(a.asset)===norm($("pmAsset").value));
+  if(asset)$("pmModel").value=asset.model;
+  fillServiceChoices();
+}
+$("pmAsset").addEventListener("change",updateAssetModel);
+$("pmModel").addEventListener("change",()=>fillServiceChoices());
+function renderServiceRegister(){
+  $("assetRegisterList").replaceChildren();
+  assetModels.slice().sort((a,b)=>a.asset.localeCompare(b.asset)).forEach(a=>{
+    const row=document.createElement("div");row.className="entry";
+    const text=document.createElement("span");text.textContent=a.asset+" • "+a.model+" ";
+    const del=document.createElement("button");del.type="button";del.className="sec";del.textContent="Remove";
+    del.onclick=()=>{if(!confirm("Remove asset mapping? Existing bookings will remain."))return;
+      assetModels=assetModels.filter(x=>norm(x.asset)!==norm(a.asset));saveAssets();pushDel("assetmodel:"+norm(a.asset),"assetmodel");renderServiceRegister()};
+    row.append(text,del);$("assetRegisterList").appendChild(row);
+  });
+  const models=new Set([...assetModels.map(a=>a.model),...serviceKits.map(k=>k.model)]);
+  $("serviceModels").replaceChildren(...[...models].sort().map(m=>new Option(m)));
+  $("kitList").replaceChildren();
+  serviceKits.slice().sort((a,b)=>a.model.localeCompare(b.model)||a.service.localeCompare(b.service)).forEach(k=>{
+    const box=document.createElement("div");box.className="entry";
+    const title=document.createElement("b");title.textContent=k.model+" • "+k.service+" ("+k.parts.length+" parts)";box.appendChild(title);
+    k.parts.forEach(p=>{const row=document.createElement("div");row.textContent=p.part+" • "+p.description+" • Qty "+p.qty;box.appendChild(row)});
+    const edit=document.createElement("button");edit.type="button";edit.textContent="Edit";
+    edit.onclick=()=>{$("kitEdit").value=k.id;$("kitModel").value=k.model;$("kitService").value=k.service;
+      $("kitLines").value=k.parts.map(p=>[p.part,p.description,p.qty].join(" | ")).join("\n");$("kitForm").scrollIntoView({behavior:"smooth"})};
+    const del=document.createElement("button");del.type="button";del.className="sec";del.textContent="Delete";
+    del.onclick=()=>{if(!confirm("Delete service template? Existing booking picking lists will remain."))return;
+      serviceKits=serviceKits.filter(x=>x.id!==k.id);saveKits();pushDel("servicekit:"+k.id,"servicekit");renderServiceRegister();fillServiceChoices()};
+    const actions=document.createElement("div");actions.className="actions";actions.append(edit,del);box.appendChild(actions);$("kitList").appendChild(box);
+  });
+}
+$("assetRegisterForm").onsubmit=e=>{e.preventDefault();
+  const asset=norm($("arNumber").value),model=$("arModel").value.trim();
+  const record={asset,model};assetModels=assetModels.filter(a=>norm(a.asset)!==asset);assetModels.push(record);
+  saveAssets();qpush("assetmodel:"+asset,"assetmodel",record);$("assetRegisterForm").reset();renderServiceRegister();updateAssetModel();
+};
+$("kitClear").onclick=()=>{$("kitForm").reset();$("kitEdit").value=""};
+$("kitForm").onsubmit=e=>{e.preventDefault();
+  const model=$("kitModel").value.trim(),service=$("kitService").value.trim();
+  const parts=[];
+  for(const line of $("kitLines").value.split(/\r?\n/).filter(x=>x.trim())){
+    const fields=line.split("|").map(x=>x.trim());const qty=Number(fields[2]);
+    if(fields.length!==3||!fields[0]||!Number.isSafeInteger(qty)||qty<=0){alert("Invalid part line: "+line+". Use part | description | positive whole-number quantity.");return}
+    if(parts.some(p=>norm(p.part)===norm(fields[0]))){alert("Duplicate part number in kit: "+fields[0]);return}
+    parts.push({part:fields[0],description:fields[1],qty});
+  }
+  if(!parts.length){alert("Add at least one part.");return}
+  const existing=kitFor(model,service),editing=serviceKits.find(k=>String(k.id)===$("kitEdit").value);
+  if(existing&&existing!==editing){alert("A service kit already exists for this model and service. Edit it instead.");return}
+  const k={id:editing?editing.id:Date.now(),model,service,parts};
+  serviceKits=serviceKits.filter(x=>x.id!==k.id);serviceKits.push(k);
+  saveKits();qpush("servicekit:"+k.id,"servicekit",k);$("kitClear").click();renderServiceRegister();fillServiceChoices();
+};
+function showServicePage(){
+  $("warrantySection").style.display="none";$("wHomeContent").style.display="none";
+  $("serviceSection").style.display="";$("maintenanceCard").style.display="none";
+  $("etacard").style.display="none";
+  $("wHome").classList.remove("active");$("wOpen").classList.remove("active");$("serviceNav").classList.add("active");
+  renderServiceRegister();
+}
+$("serviceNav").onclick=showServicePage;
+const originalShowWarrantyPage=showWarrantyPage;
+showWarrantyPage=function(show){$("serviceSection").style.display="none";$("serviceNav").classList.remove("active");originalShowWarrantyPage(show)};
+function setPickStatus(bookingId,part,status){
+  const m=maintenance.find(x=>String(x.id)===String(bookingId));if(!m)return;
+  const item=(m.pickParts||[]).find(p=>p.part===part);if(!item)return;
+  item.status=status;item.updatedBy=$("from").value;item.updatedAt=new Date().toISOString();
+  m.updatedAt=new Date().toISOString();pmSaveLocal();pushPM(m);renderMaintenance();
+}
+function printBooking(m){
+  const win=window.open("","_blank");if(!win){alert("Allow pop-ups to print picking lists.");return}
+  const safe=v=>esc(String(v||""));
+  const html=`<!doctype html><html><head><title>Picking List</title><style>body{font:16px Arial;margin:30px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #777;padding:9px;text-align:left}</style></head><body>
+    <h1>Service Parts Picking List</h1><p>Asset: ${safe(m.asset)} | Model: ${safe(m.model)} | Service: ${safe(m.service)} | Due: ${safe(pmEntryDate(m))} ${safe(pmEntryTime(m))}</p>
+    <table><tr><th>Part Number</th><th>Description</th><th>Qty</th><th>Status</th></tr>${(m.pickParts||[]).map(p=>`<tr><td>${safe(p.part)}</td><td>${safe(p.description)}</td><td>${Number(p.qty)}</td><td>${safe(p.status||"Not Picked")}</td></tr>`).join("")}</table></body></html>`;
+  win.document.write(html);win.document.close();win.focus();win.print();
+}
+
 // ---- Planned Maintenance Window: existing handover_sync queue ----
 const PMKEY="maintenance.v1";
 let maintenance=JSON.parse(localStorage.getItem(PMKEY)||"[]");
@@ -1151,7 +1295,8 @@ function pmToday(){
 function pmClear(){
   $("maintenanceForm").reset();
   $("pmEdit").value = "";
-  $("pmDate").value = pmToday();
+      $("pmDate").value = pmToday();
+    $("pmModel").value="";fillServiceChoices();
   $("pmSave").textContent = "Add";
 }
 
@@ -1188,7 +1333,7 @@ function renderMaintenance(){
     box.className = "entry";
 
     const title = document.createElement("b");
-    title.textContent = m.asset;
+    title.textContent = m.asset+(m.service?" • "+m.service:"")+(m.model?" ("+m.model+")":"");
 
     const time = document.createElement("p");
     time.textContent =
@@ -1205,6 +1350,7 @@ function renderMaintenance(){
 
       $("pmEdit").value = m.id;
       $("pmAsset").value = m.asset;
+      $("pmModel").value=m.model||"";fillServiceChoices(m.service||"");
       $("pmDescription").value = m.description || "";
       $("pmDate").value = pmEntryDate(m);
       $("pmTime").value = pmEntryTime(m);
@@ -1248,6 +1394,24 @@ function renderMaintenance(){
       box.appendChild(description);
     }
 
+    if(m.service){
+      const pick=document.createElement("div");pick.className="brief-section";
+      const heading=document.createElement("b");heading.textContent="Parts to pick";pick.appendChild(heading);
+      const lines=m.pickParts||[];
+      if(!lines.length){const note=document.createElement("p");note.className="flag";note.textContent="No kit parts saved for this service. Check the service template.";pick.appendChild(note)}
+      lines.forEach(p=>{
+        const row=document.createElement("div");row.className="pick-line";
+        const info=document.createElement("span");info.className="part-info";info.textContent=p.part+" • "+p.description+" • Qty "+p.qty;
+        const select=document.createElement("select");select.setAttribute("aria-label","Picking status for "+p.part);
+        ["Not Picked","Picked","Not Available"].forEach(x=>select.add(new Option(x,x)));
+        select.value=p.status||"Not Picked";select.onchange=()=>setPickStatus(m.id,p.part,select.value);
+        row.append(info,select);pick.appendChild(row);
+      });
+      const summary=document.createElement("p");summary.className="service-hint";
+      summary.textContent=lines.filter(p=>p.status==="Picked").length+" of "+lines.length+" parts picked";pick.appendChild(summary);
+      const print=document.createElement("button");print.type="button";print.className="sec";print.textContent="🖨 Print picking list";print.onclick=()=>printBooking(m);
+      actions.append(print);box.appendChild(pick);
+    }
     actions.append(edit,del);
     box.append(title,time,actions);
     list.appendChild(box);
@@ -1266,9 +1430,16 @@ $("maintenanceForm").onsubmit = e => {
     m => String(m.id) === id
   );
 
-  const m = {
+      const model=$("pmModel").value.trim(),service=$("pmService").value;
+    const kit=service?kitFor(model,service):null;
+    if(service&&!kit){alert("Service kit not found for this model. Please create a kit first.");return}
+    const preserve=old&&norm(old.model)===norm(model)&&norm(old.service)===norm(service);
+    if(old&&!preserve&&old.pickParts?.some(p=>p.status==="Picked")&&!confirm("Changing service will reset the picking statuses. Continue?"))return;
+    const pickParts=service?(preserve&&old.pickParts?.length?old.pickParts:kit.parts.map(p=>({...p,status:"Not Picked"}))):[];
+    const m = {
 
     id: old ? old.id : Date.now(),
+    model,service,pickParts,
 
     asset: $("pmAsset").value.trim(),
     description: $("pmDescription").value.trim(),
@@ -1305,7 +1476,7 @@ $("maintenanceForm").onsubmit = e => {
 
 $("pmCancel").onclick = pmClear;
 
-renderMaintenance();
+renderMaintenance();renderServiceRegister();
 
 // ---- Supabase Auth + explicit allowlist ----
 let appAuthorized=false,authChecking=false,authBooted=false;
@@ -1379,7 +1550,7 @@ $("authLogout").onclick=async()=>{
   appAuthorized=false;authGate(true);
   if(sb)await sb.auth.signOut();
   // Clear locally cached workplace records on this device after sign-out.
-  [KEY,TKEY,EKEY,WKEY,PMKEY,SKEY,PKEY,RSEEN,SOUT,SLAST,"parts.cache","pt.cred.v1"].forEach(k=>localStorage.removeItem(k));
+      [KEY,TKEY,EKEY,WKEY,PMKEY,ARKEY,KITKEY,SKEY,PKEY,RSEEN,SOUT,SLAST,"parts.cache","pt.cred.v1"].forEach(k=>localStorage.removeItem(k));
   location.reload();
 };
 
@@ -1430,7 +1601,11 @@ function applyRow(r){
     const id=r.id.slice(12);
     maintenance=maintenance.filter(m=>String(m.id)!==id);
     if(!v.deleted)maintenance.push(v)}
-  else if(r.kind==="pin"){const u=r.id.slice(4);if(v.hash)pins[u]=v.hash}
+      else if(r.kind==="assetmodel"){
+      const asset=r.id.slice(11);assetModels=assetModels.filter(a=>norm(a.asset)!==asset);if(!v.deleted)assetModels.push(v)}
+    else if(r.kind==="servicekit"){
+      const id=r.id.slice(11);serviceKits=serviceKits.filter(k=>String(k.id)!==id);if(!v.deleted)serviceKits.push(v)}
+    else if(r.kind==="pin"){const u=r.id.slice(4);if(v.hash)pins[u]=v.hash}
   else if(r.kind==="shift")ss.on=Array.isArray(v.on)?v.on:v.cur?[v.cur]:[]}
 async function pull(){
   if(!sb||!appAuthorized||!navigator.onLine){syncUI();return}
@@ -1454,15 +1629,17 @@ async function pull(){
     tasks.forEach(t=>{if(!seen.has("task:"+t.id))pushT(t)});
     etas.forEach(x=>{if(!seen.has("eta:"+x.id))pushE(x)});
     warranties.forEach(w=>{if(!seen.has("warranty:"+w.id))pushW(w)});
-    maintenance.forEach(m=>{if(!seen.has("maintenance:"+m.id))pushPM(m)});
+          maintenance.forEach(m=>{if(!seen.has("maintenance:"+m.id))pushPM(m)});
+      assetModels.forEach(a=>{if(!seen.has("assetmodel:"+norm(a.asset)))qpush("assetmodel:"+norm(a.asset),"assetmodel",a)});
+      serviceKits.forEach(k=>{if(!seen.has("servicekit:"+k.id))qpush("servicekit:"+k.id,"servicekit",k)});
     Object.keys(pins).forEach(u=>{if(!seen.has("pin:"+u))pushPin(u)});
     if(ss.on.length&&!seen.has("shift:current"))pushShift()}
   if(!rows.length){if(!synced){synced=true;render()}syncUI();return}
-  save();tsave();esave();pmSaveLocal();wsave();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
+      save();tsave();esave();pmSaveLocal();wsave();saveAssets();saveKits();ssave();localStorage.setItem(PKEY,JSON.stringify(pins));
   if(JSON.stringify(ss.on)!==prevCur){ // signed on/off from another device
     if(!ss.on.length&&$("lock").style.display!=="flex")openLock();
     else if($("lock").style.display==="flex")openLock(lockOff&&ss.on.length?true:false)}
-  synced=true;render();renderWarranties();renderMaintenance();flush();syncUI()}
+      synced=true;render();renderWarranties();renderMaintenance();renderServiceRegister();fillServiceChoices($("pmService").value);flush();syncUI()}
 window.addEventListener("online",()=>{flush();pull()});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
 setInterval(pull,20000);
