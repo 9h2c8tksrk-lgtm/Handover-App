@@ -4,26 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shift Handover</title>
-<script src="https://unpkg.com/html5-qrcode">
-// Keep Workshop Today immediately below the live lightning card on wide screens.
-// Lockie tab visibility refresh
-["wHome","wOpen","serviceNav","scheduleNav"].forEach(id=>document.getElementById(id)?.addEventListener("click",()=>setTimeout(renderMtData,0)));
-function alignWorkshopPanels(){
-  const lightning=document.getElementById('lxcard');
-  if(!lightning)return;
-  const height=lightning.getBoundingClientRect().height;
-  document.documentElement.style.setProperty('--workshop-top',Math.ceil(70+height+12)+'px');
-}
-new ResizeObserver(alignWorkshopPanels).observe(document.getElementById('lxcard'));
-window.addEventListener('resize',alignWorkshopPanels);
-const workshopLayoutObserver=new MutationObserver(()=>{
-  alignWorkshopPanels();
-  if(typeof renderMtData==='function')renderMtData();
-});
-workshopLayoutObserver.observe(document.getElementById('wHomeContent'),{attributes:true,attributeFilter:['style']});
-workshopLayoutObserver.observe(document.getElementById('from'),{attributes:true,attributeFilter:['value']});
-alignWorkshopPanels();
-</script>
+<script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}
@@ -81,7 +62,7 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 #lxcard.lx-danger{background:#7a2a2a}
 #lxcard.lx-danger h2{color:#fff}
 #lxcard small{color:#bbb}
-#mtDataCard{display:block}
+#mtDataCard{display:none}
 #mtDataCard p{font-size:.85rem;color:#c4cbd1;margin:6px 0 10px}
 #mtDataCard .actions{align-items:center}
 #mtDataCard a{display:inline-block;background:#e8a317;color:#111;text-decoration:none;font-weight:600;border-radius:6px;padding:9px 12px}
@@ -138,7 +119,7 @@ body.auth-locked > :not(#authGate){display:none!important}
   #lxcard,#maintenanceCard{left:16px!important;right:auto!important;width:360px!important;max-width:calc((100vw - 800px)/2)!important;margin-left:0!important}
   #lxcard{top:70px!important;max-height:none!important;overflow:visible!important}
   #maintenanceCard{top:var(--workshop-top,270px)!important;max-height:calc(100vh - var(--workshop-top,270px) - 16px)!important;overflow-y:auto!important}
-  #mtDataCard{left:calc(50% + 396px)!important;right:16px!important;top:70px!important;max-width:360px!important}
+  #mtDataCard{left:calc(50% + 396px)!important;right:16px!important;top:70px!important;max-width:360px!important;max-height:calc(100vh - 100px);overflow-y:auto}
 }
 </style>
 </head>
@@ -212,11 +193,15 @@ body.auth-locked > :not(#authGate){display:none!important}
   <div id="lxbody" style="font-size:.9rem"></div>
 </div>
   <section class="card" id="mtDataCard" aria-label="Lockie's MTData" style="display:none">
-    <h2>🚛 Lockie's MTData</h2>
-    <p>Open your MTData Hawk-Eye login securely in a separate tab. Your MTData password is never saved here.</p>
+    <h2>🚛 Lockie's MTData Hawk-Eye</h2>
+    <p>Sign in directly to MTData below. If the provider blocks embedded access, use Open Full Website.</p>
     <div class="actions">
-      <a id="mtDataOpen" href="#" target="_blank" rel="noopener noreferrer" style="display:none">🔐 Open MTData Login</a>
-      <button type="button" class="sec" id="mtDataSet">Set login link</button>
+      <button type="button" class="sec" id="mtEmbedToggle">Show MTData inside window</button>
+      <a id="mtDataOpen" href="https://mdc04.mtdata.com.au/Hawkeye/" target="_blank" rel="noopener noreferrer">↗ Open Full Website</a>
+    </div>
+    <div id="mtEmbedWrap" style="display:none;margin-top:12px">
+      <iframe id="mtEmbed" title="MTData Hawk-Eye" referrerpolicy="strict-origin-when-cross-origin" style="width:100%;height:440px;border:1px solid #56616d;border-radius:8px;background:#fff" loading="lazy"></iframe>
+      <p class="service-hint">If the frame stays blank or says connection refused, MTData does not allow embedding. Open Full Website instead.</p>
     </div>
     <p id="mtDataHelp" role="status"></p>
   </section>
@@ -350,6 +335,8 @@ body.auth-locked > :not(#authGate){display:none!important}
       <p class="service-hint">Use real approved part numbers. Separate columns with |. Quantities must be greater than zero.</p>
       <div class="actions"><button type="submit">Save service kit</button><button type="button" class="sec" id="kitClear">Clear</button></div>
     </form>
+    <div class="actions"><button type="button" id="importC509Kits" class="sec">📥 Import Kenworth C509 B1–C4 service kits</button></div>
+    <p class="service-hint">Import skips existing model/service combinations. Oil quantities are in litres (LT).</p>
     <div id="kitList"></div>
   </section>
   <div id="wHomeContent">
@@ -568,32 +555,40 @@ function entry(h){
     :`<button data-ack="${h.id}" ${h.to!==$("from").value?"disabled":""}>I've read this (${h.to})</button>`}
   <button class="sec" data-copy="${h.id}">Copy</button><button class="sec" data-del="${h.id}">Delete</button></div></div>`;
 }
-  // Lockie's personal link is local to this browser, not shared with the crew.
-  const MT_LINK_KEY="handover.lockie.mtdata.url";
+  const MT_URL="https://mdc04.mtdata.com.au/Hawkeye/";
   function renderMtData(){
-    const signedOn=ss.on.some(c=>["lachlan","lockie","lachlan morris"].includes(String(c.user||"").trim().toLowerCase()));
-    const visible=appAuthorized && ["lachlan","lockie","lachlan morris"].includes(String($("from").value||"").trim().toLowerCase()) && $("wHomeContent").style.display!=="none" && $("warrantySection").style.display==="none";
-    $("mtDataCard").style.display=visible?"":"none";
-    const url=localStorage.getItem(MT_LINK_KEY)||"";
-    $("mtDataOpen").style.display=url?"":"none";
-    if(url)$("mtDataOpen").href=url;
-    $("mtDataHelp").textContent=url?"Sign in directly on the official MTData website.":"Set the official MTData login URL once on this device.";
+    const name=String($("from").value||"").trim().toLowerCase();
+    const signedOn=ss.on.some(c=>String(c.user||"").trim().toLowerCase()===name);
+    const visible=appAuthorized && signedOn && ["lockie","lachlan","lachlan morris"].includes(name)
+      && $("wHomeContent").style.display!=="none" && $("warrantySection").style.display==="none";
+    $("mtDataCard").style.display=visible?"block":"none";
+    if(!visible){$("mtEmbedWrap").style.display="none";$("mtEmbed").removeAttribute("src");}
+    $("mtDataHelp").textContent="MTData login remains on the official MTData website; no password is stored here.";
+    updateRightRail();
   }
+  $("mtEmbedToggle").onclick=()=>{
+    const wrap=$("mtEmbedWrap"),open=wrap.style.display!=="none";
+    wrap.style.display=open?"none":"block";
+    if(open)$("mtEmbed").removeAttribute("src");
+    else $("mtEmbed").src=MT_URL;
+    $("mtEmbedToggle").textContent=open?"Show MTData inside window":"Hide embedded MTData";
+    updateRightRail();
+  };
   ["wHome","wOpen","serviceNav","scheduleNav"].forEach(id=>
     $(id).addEventListener("click",()=>setTimeout(renderMtData,0)));
-  $("mtDataSet").onclick=()=>{
-    if($("mtDataCard").style.display==="none")return;
-    const value=prompt("Paste the official MTData Hawk-Eye login URL (https://...):",localStorage.getItem(MT_LINK_KEY)||"");
-    if(value===null)return;
-    const input=value.trim();
-    if(!input){localStorage.removeItem(MT_LINK_KEY);renderMtData();return}
-    try{const url=new URL(input);if(url.protocol!=="https:")throw Error("HTTPS required");
-      if(!confirm("Only save this link if you recognise it as the official MTData login website. Continue?"))return;
-      localStorage.setItem(MT_LINK_KEY,url.href);renderMtData();
-    }catch{alert("Enter a valid HTTPS login URL.")}
-  };
+  function updateRightRail(){
+    const panel=$("mtDataCard"), orders=$("etacard");
+    if(window.innerWidth<1300){orders.style.removeProperty("top");orders.style.removeProperty("max-height");return}
+    const isShown=getComputedStyle(panel).display!=="none";
+    const top=isShown?Math.ceil(panel.getBoundingClientRect().bottom+20):70;
+    orders.style.top=top+"px";
+    orders.style.maxHeight="calc(100vh - "+(top+16)+"px)";
+  }
+  window.addEventListener("resize",updateRightRail);
+  new ResizeObserver(updateRightRail).observe($("mtDataCard"));
   function render(){
     spawnRecurring();
+    renderMtData();
   const me=$("from").value, sup=isSup();
   if(!sup)supMode=false;
   // supervisor controls + handovers-only view
@@ -1289,6 +1284,21 @@ function updateAssetModel(){
 }
 $("pmAsset").addEventListener("change",updateAssetModel);
 $("pmModel").addEventListener("change",()=>fillServiceChoices());
+
+// C509_SERVICE_KITS_IMPORT_V1 - user-provided approved kit data, not manufacturer-verified.
+const C509_KITS = {"B1":[{"part":"LF14000NN","description":"ENGINE OIL FILTER","qty":1},{"part":"3413005","description":"ENGINE OIL (LT)","qty":47}],"B2":[{"part":"LF14000NN","description":"ENGINE OIL FILTER","qty":1},{"part":"3413005","description":"ENGINE OIL (LT)","qty":47},{"part":"FF5825NN","description":"FUEL FILTER","qty":1}],"B3":[{"part":"LF14000NN","description":"ENGINE OIL FILTER","qty":1},{"part":"3413005","description":"ENGINE OIL (LT)","qty":47},{"part":"P640519","description":"AIR FILTERS","qty":2},{"part":"3430286","description":"DYNADRIVE OIL (LT)","qty":60}],"B4":[{"part":"LF14000NN","description":"ENGINE OIL FILTER","qty":1},{"part":"3413005","description":"ENGINE OIL (LT)","qty":47},{"part":"FF5825NN","description":"FUEL FILTER","qty":1},{"part":"P640519","description":"AIR FILTERS","qty":2},{"part":"3430286","description":"DYNADRIVE OIL (LT)","qty":60}],"C1":[{"part":"LF14000NN","description":"ENGINE OIL FILTER","qty":1},{"part":"LF637","description":"POWER STEERING FILTER","qty":1},{"part":"WF2127","description":"COOLANT FILTER","qty":1},{"part":"17237","description":"GEARBOX FILTER","qty":1},{"part":"UF110","description":"ADBLU FILTER","qty":1},{"part":"2122909","description":"ADBLU FILTER","qty":1},{"part":"M37-6091","description":"FILTER-AIR, DEF TANK VENT","qty":1},{"part":"T224P","description":"AIR DRYER FILTERS","qty":2},{"part":"D8410003122550","description":"FAN BELT","qty":1},{"part":"3413005","description":"ENGINE OIL (LT)","qty":47},{"part":"3371179","description":"ATF POWER STEERING (LT)","qty":4},{"part":"3430286","description":"DYNADRIVE OIL (LT)","qty":80},{"part":"6PK1620","description":"A/C BELT","qty":1}],"C2":[{"part":"LF14000NN","description":"ENGINE OIL FILTER","qty":1},{"part":"FF5825NN","description":"FUEL FILTER","qty":1},{"part":"LF637","description":"POWER STEERING FILTER","qty":1},{"part":"WF2127","description":"COOLANT FILTER","qty":1},{"part":"17237","description":"GEARBOX FILTER","qty":1},{"part":"UF110","description":"ADBLU FILTER","qty":1},{"part":"2122909","description":"ADBLU FILTER","qty":1},{"part":"M37-6091","description":"FILTER-AIR, DEF TANK VENT","qty":1},{"part":"T224P","description":"AIR DRYER FILTERS","qty":2},{"part":"D8410003122550","description":"FAN BELT","qty":1},{"part":"6PK1620","description":"A/C BELT","qty":1},{"part":"3371179","description":"ATF POWER STEERING (LT)","qty":4},{"part":"3430286","description":"DYNADRIVE OIL (LT)","qty":80},{"part":"3413005","description":"ENGINE OIL (LT)","qty":47}],"C3":[{"part":"LF14000NN","description":"ENGINE OIL FILTER","qty":1},{"part":"LF637","description":"POWER STEERING FILTER","qty":1},{"part":"WF2127","description":"COOLANT FILTER","qty":1},{"part":"17237","description":"GEARBOX FILTER","qty":1},{"part":"UF110","description":"ADBLU FILTER","qty":1},{"part":"2122909","description":"ADBLU FILTER","qty":1},{"part":"M37-6091","description":"FILTER-AIR, DEF TANK VENT","qty":1},{"part":"T224P","description":"AIR DRYER FILTERS","qty":2},{"part":"D8410003122550","description":"FAN BELT","qty":1},{"part":"6PK1620","description":"A/C BELT","qty":1},{"part":"P640519","description":"AIR FILTERS","qty":2},{"part":"3430286","description":"DYNADRIVE OIL (LT)","qty":80},{"part":"3413005","description":"ENGINE OIL (LT)","qty":47},{"part":"3371179","description":"ATF POWER STEERING (LT)","qty":4}],"C4":[{"part":"LF14000NN","description":"ENGINE OIL FILTER","qty":1},{"part":"FF5825NN","description":"FUEL FILTER","qty":1},{"part":"LF637","description":"POWER STEERING FILTER","qty":1},{"part":"WF2127","description":"COOLANT FILTER","qty":1},{"part":"17237","description":"GEARBOX FILTER","qty":1},{"part":"UF110","description":"ADBLU FILTER","qty":1},{"part":"2122909","description":"ADBLU FILTER","qty":1},{"part":"M37-6091","description":"FILTER-AIR, DEF TANK VENT","qty":1},{"part":"T224P","description":"AIR DRYER FILTERS","qty":2},{"part":"D8410003122550","description":"FAN BELT","qty":1},{"part":"6PK1620","description":"A/C BELT","qty":1},{"part":"F37TP1000","description":"CABIN FILTER","qty":1},{"part":"P640519","description":"AIR FILTERS","qty":2},{"part":"3430286","description":"DYNADRIVE OIL (LT)","qty":80},{"part":"3413005","description":"ENGINE OIL (LT)","qty":47},{"part":"3371179","description":"ATF POWER STEERING (LT)","qty":4}]};
+$("importC509Kits").onclick=()=>{
+  if(!confirm("Import the eight Kenworth C509 service templates? Existing kits will be kept unchanged."))return;
+  let added=0,skipped=0;
+  Object.entries(C509_KITS).forEach(([service,parts])=>{
+    if(kitFor("Kenworth C509",service)){skipped++;return;}
+    const k={id:"kenworth-c509-"+service.toLowerCase(),model:"Kenworth C509",service,parts:parts.map(p=>({...p}))};
+    serviceKits.push(k);qpush("servicekit:"+k.id,"servicekit",k);added++;
+  });
+  saveKits();renderServiceRegister();fillServiceChoices($("pmService").value);
+  alert(added+" Kenworth C509 kits added; "+skipped+" already existed and were left unchanged. Check Supabase sync status before using on another device.");
+};
+
 function renderServiceRegister(){
   $("assetRegisterList").replaceChildren();
   assetModels.slice().sort((a,b)=>a.asset.localeCompare(b.asset)).forEach(a=>{
@@ -1777,7 +1787,16 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
 setInterval(pull,20000);
 syncUI();
 // Rendering is gated until the session and authorised-user allowlist are verified.
-bootstrapAuth();
-</script>
+  bootstrapAuth();
+  // Keep Workshop Today positioned beneath the live lightning panel.
+  function alignWorkshopPanels(){
+    const lightning=$("lxcard");
+    if(!lightning)return;
+    document.documentElement.style.setProperty("--workshop-top",Math.ceil(70+lightning.getBoundingClientRect().height+12)+"px");
+  }
+  new ResizeObserver(alignWorkshopPanels).observe($("lxcard"));
+  window.addEventListener("resize",alignWorkshopPanels);
+  alignWorkshopPanels();
+  </script>
 </body>
 </html>
