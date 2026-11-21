@@ -4,7 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shift Handover</title>
-<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://unpkg.com/html5-qrcode">
+// Keep Workshop Today immediately below the live lightning card on wide screens.
+// Lockie tab visibility refresh
+["wHome","wOpen","serviceNav","scheduleNav"].forEach(id=>document.getElementById(id)?.addEventListener("click",()=>setTimeout(renderMtData,0)));
+function alignWorkshopPanels(){
+  const lightning=document.getElementById('lxcard');
+  if(!lightning)return;
+  const height=lightning.getBoundingClientRect().height;
+  document.documentElement.style.setProperty('--workshop-top',Math.ceil(70+height+12)+'px');
+}
+new ResizeObserver(alignWorkshopPanels).observe(document.getElementById('lxcard'));
+window.addEventListener('resize',alignWorkshopPanels);
+const workshopLayoutObserver=new MutationObserver(()=>{
+  alignWorkshopPanels();
+  if(typeof renderMtData==='function')renderMtData();
+});
+workshopLayoutObserver.observe(document.getElementById('wHomeContent'),{attributes:true,attributeFilter:['style']});
+workshopLayoutObserver.observe(document.getElementById('from'),{attributes:true,attributeFilter:['value']});
+alignWorkshopPanels();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}
@@ -113,7 +132,15 @@ body.auth-locked > :not(#authGate){display:none!important}
   .pick-line .part-info{flex:1;min-width:175px}
   .service-hint{color:#b9c1c9;font-size:.85rem}
   @media print{body *{visibility:hidden!important}#printPicking,#printPicking *{visibility:visible!important}#printPicking{position:absolute;left:0;top:0;width:100%;color:#000;background:#fff;padding:20px}#printPicking button{display:none}}
-  </style>
+
+/* Workshop/lightning alignment correction */
+@media(min-width:1300px){
+  #lxcard,#maintenanceCard{left:16px!important;right:auto!important;width:360px!important;max-width:calc((100vw - 800px)/2)!important;margin-left:0!important}
+  #lxcard{top:70px!important;max-height:none!important;overflow:visible!important}
+  #maintenanceCard{top:var(--workshop-top,270px)!important;max-height:calc(100vh - var(--workshop-top,270px) - 16px)!important;overflow-y:auto!important}
+  #mtDataCard{left:calc(50% + 396px)!important;right:16px!important;top:70px!important;max-width:360px!important}
+}
+</style>
 </head>
 <body class="auth-locked">
 <div id="authGate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -545,7 +572,7 @@ function entry(h){
   const MT_LINK_KEY="handover.lockie.mtdata.url";
   function renderMtData(){
     const signedOn=ss.on.some(c=>c.user==="Lockie");
-    const visible=appAuthorized && signedOn && $("from").value==="Lockie" && $("wHomeContent").style.display!=="none";
+    const visible=appAuthorized && signedOn && $("from").value==="Lockie" && $("wHomeContent").style.display!=="none" && $("warrantySection").style.display==="none";
     $("mtDataCard").style.display=visible?"":"none";
     const url=localStorage.getItem(MT_LINK_KEY)||"";
     $("mtDataOpen").style.display=url?"":"none";
