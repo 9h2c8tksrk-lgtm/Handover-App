@@ -571,8 +571,8 @@ function entry(h){
   // Lockie's personal link is local to this browser, not shared with the crew.
   const MT_LINK_KEY="handover.lockie.mtdata.url";
   function renderMtData(){
-    const signedOn=ss.on.some(c=>c.user==="Lockie");
-    const visible=appAuthorized && signedOn && $("from").value==="Lockie" && $("wHomeContent").style.display!=="none" && $("warrantySection").style.display==="none";
+    const signedOn=ss.on.some(c=>["lachlan","lockie","lachlan morris"].includes(String(c.user||"").trim().toLowerCase()));
+    const visible=appAuthorized && signedOn && ["lachlan","lockie","lachlan morris"].includes(String($("from").value||"").trim().toLowerCase()) && $("wHomeContent").style.display!=="none" && $("warrantySection").style.display==="none";
     $("mtDataCard").style.display=visible?"":"none";
     const url=localStorage.getItem(MT_LINK_KEY)||"";
     $("mtDataOpen").style.display=url?"":"none";
