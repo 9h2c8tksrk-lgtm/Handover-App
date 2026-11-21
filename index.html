@@ -66,6 +66,8 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 /* Planned Maintenance Window: left of Daily Planner on wide screens */
 #maintenanceCard{width:100%}
 #maintenanceList .entry{overflow-wrap:anywhere}
+#workshopTodayCompact .entry{padding:7px 9px;margin:7px 0;font-size:.86rem}
+#workshopTodayCompact button{padding:5px 8px;font-size:.8rem}
 @media(min-width:1300px){
   #maintenanceCard{position:fixed;top:70px;right:calc(50% + 396px);left:16px;
     width:auto;max-width:360px;max-height:calc(100vh - 90px);overflow-y:auto;z-index:5}
@@ -181,6 +183,7 @@ body.auth-locked > :not(#authGate){display:none!important}
   <button type="button" id="wHome" class="active">🏠 Handover</button>
       <button type="button" id="wOpen">🔧 Warranties</button>
     <button type="button" id="serviceNav">🔩 Service Parts</button>
+    <button type="button" id="scheduleNav">🚛 Workshop Scheduling</button>
 </div>
 <div id="banner"></div>
 <div id="pending"></div>
@@ -307,6 +310,12 @@ body.auth-locked > :not(#authGate){display:none!important}
 
 
 <section class="card" id="maintenanceCard">
+  <h2>🚛 Workshop Today</h2>
+  <p class="service-hint">Today's arrivals. Print a service picking list beside the relevant asset.</p>
+  <div id="workshopTodayCompact"></div>
+</section>
+<section class="card" id="scheduleSection" style="display:none">
+  <h2>🚛 Workshop Scheduling</h2>
 
   <h2>🔧 Due In Workshop Today</h2>
 
@@ -522,7 +531,8 @@ function render(){
   $("supview").textContent=supMode?"← Normal view":"👁 Handovers view";
   document.querySelectorAll(".supx").forEach(el=>el.style.display=sup?"":"none");
   $("plannercard").style.display=supMode?"none":"";
-  if(!document.getElementById("warrantySection")||$("warrantySection").style.display==="none")$("maintenanceCard").style.display=supMode?"none":"";
+  if($("wHomeContent").style.display!=="none" && $("warrantySection").style.display==="none")
+    $("maintenanceCard").style.display=supMode?"none":"";
   $("form").style.display=supMode?"none":"";
   $("rosterbox").style.display=supMode?"none":"";
   const p=data.filter(h=>h.to===me&&!h.ack);
@@ -1261,12 +1271,30 @@ function showServicePage(){
   $("warrantySection").style.display="none";$("wHomeContent").style.display="none";
   $("serviceSection").style.display="";$("maintenanceCard").style.display="none";
   $("etacard").style.display="none";
+  $("scheduleSection").style.display="none";$("scheduleNav").classList.remove("active");
   $("wHome").classList.remove("active");$("wOpen").classList.remove("active");$("serviceNav").classList.add("active");
   renderServiceRegister();
 }
 $("serviceNav").onclick=showServicePage;
+function showSchedulePage(){
+  if($("scheduleSection").parentElement===$("wHomeContent"))document.querySelector("main").appendChild($("scheduleSection"));
+  $("warrantySection").style.display="none";
+  $("serviceSection").style.display="none";
+  $("wHomeContent").style.display="none";
+  $("scheduleSection").style.display="";
+  $("maintenanceCard").style.display="none";
+  $("etacard").style.display="none";
+  ["wHome","wOpen","serviceNav"].forEach(id=>$(id).classList.remove("active"));
+  $("scheduleNav").classList.add("active");
+  renderMaintenance();
+}
+$("scheduleNav").onclick=showSchedulePage;
 const originalShowWarrantyPage=showWarrantyPage;
-showWarrantyPage=function(show){$("serviceSection").style.display="none";$("serviceNav").classList.remove("active");originalShowWarrantyPage(show)};
+showWarrantyPage=function(show){
+  $("serviceSection").style.display="none";$("serviceNav").classList.remove("active");
+  $("scheduleSection").style.display="none";$("scheduleNav").classList.remove("active");
+  originalShowWarrantyPage(show);
+};
 function setPickStatus(bookingId,part,status){
   const m=maintenance.find(x=>String(x.id)===String(bookingId));if(!m)return;
   const item=(m.pickParts||[]).find(p=>p.part===part);if(!item)return;
@@ -1279,7 +1307,22 @@ function printBooking(m){
   const html=`<!doctype html><html><head><title>Picking List</title><style>body{font:16px Arial;margin:30px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #777;padding:9px;text-align:left}</style></head><body>
     <h1>Service Parts Picking List</h1><p>Asset: ${safe(m.asset)} | Model: ${safe(m.model)} | Service: ${safe(m.service)} | Due: ${safe(pmEntryDate(m))} ${safe(pmEntryTime(m))}</p>
     <table><tr><th>Part Number</th><th>Description</th><th>Qty</th><th>Status</th></tr>${(m.pickParts||[]).map(p=>`<tr><td>${safe(p.part)}</td><td>${safe(p.description)}</td><td>${Number(p.qty)}</td><td>${safe(p.status||"Not Picked")}</td></tr>`).join("")}</table></body></html>`;
-  win.document.write(html);win.document.close();win.focus();win.print();
+  win.document.write(html);win.document.close();win.focus();
+  // Browsers cannot verify physical printing; request confirmation after print dialogue.
+  win.onafterprint=()=>{
+    win.onafterprint=null;
+    if(!confirm("Was the picking list printed successfully? Mark available parts as Picked?"))return;
+    const booking=maintenance.find(x=>String(x.id)===String(m.id));if(!booking)return;
+    const now=new Date().toISOString();
+    (booking.pickParts||[]).forEach(p=>{
+      if(p.status!=="Not Available"){
+        p.status="Picked";p.updatedBy=$("from").value;p.updatedAt=now;
+      }
+    });
+    booking.lastPrintedBy=$("from").value;booking.lastPrintedAt=now;
+    booking.updatedAt=now;pmSaveLocal();pushPM(booking);renderMaintenance();
+  };
+  win.print();
 }
 
 // ---- Planned Maintenance Window: existing handover_sync queue ----
@@ -1318,6 +1361,25 @@ function renderMaintenance(){
       pmEntryTime(a).localeCompare(pmEntryTime(b))
     );
 
+  const compact=$("workshopTodayCompact");compact.replaceChildren();
+  if(!arrivals.length)compact.textContent="No vehicles due in workshop today.";
+  arrivals.forEach(m=>{
+    const row=document.createElement("div");row.className="entry";
+    const label=document.createElement("div");
+    const lines=m.pickParts||[];
+    const picked=lines.filter(p=>p.status==="Picked").length;
+    label.textContent=(m.asset||"Unknown asset")+" • "+(pmEntryTime(m)||"Time not set")+
+      " • "+(m.description||m.service||"Work not specified")+
+      (m.service?" • "+m.service:"")+
+      (lines.length?" • Parts "+picked+"/"+lines.length+" picked":"");
+    row.appendChild(label);
+    if(lines.length){
+      const print=document.createElement("button");print.type="button";print.className="sec";
+      print.textContent="🖨 Print Pick List";print.onclick=()=>printBooking(m);
+      row.appendChild(print);
+    }
+    compact.appendChild(row);
+  });
   const list = $("maintenanceList");
   list.replaceChildren();
 
