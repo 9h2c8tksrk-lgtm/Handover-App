@@ -62,12 +62,6 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 #lxcard.lx-danger{background:#7a2a2a}
 #lxcard.lx-danger h2{color:#fff}
 #lxcard small{color:#bbb}
-#mtDataCard{display:none}
-#mtDataCard p{font-size:.85rem;color:#c4cbd1;margin:6px 0 10px}
-#mtDataCard .actions{align-items:center}
-#mtDataCard a{display:inline-block;background:#e8a317;color:#111;text-decoration:none;font-weight:600;border-radius:6px;padding:9px 12px}
-#mtDataCard button{padding:8px 10px;font-size:.85rem}
-@media(max-width:1299px){#mtDataCard{width:100%}}
 
 
 /* Planned Maintenance Window: left of Daily Planner on wide screens */
@@ -83,8 +77,7 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
     width:auto;max-width:360px;max-height:190px;overflow-y:auto;z-index:6}
   #maintenanceCard{top:270px;max-height:calc(100vh - 290px)}
   /* Lockie's panel uses the right rail; special orders follow below it. */
-  #mtDataCard{position:fixed;top:70px;left:calc(50% + 396px);right:16px;max-width:360px;z-index:6}
-  #etacard{top:245px;max-height:calc(100vh - 265px)}
+  #etacard{top:70px;max-height:calc(100vh - 90px)}
 }
 
 /* Authentication gate: visual access control only; database RLS is mandatory. */
@@ -119,7 +112,6 @@ body.auth-locked > :not(#authGate){display:none!important}
   #lxcard,#maintenanceCard{left:16px!important;right:auto!important;width:360px!important;max-width:calc((100vw - 800px)/2)!important;margin-left:0!important}
   #lxcard{top:70px!important;max-height:none!important;overflow:visible!important}
   #maintenanceCard{top:var(--workshop-top,270px)!important;max-height:calc(100vh - var(--workshop-top,270px) - 16px)!important;overflow-y:auto!important}
-  #mtDataCard{left:calc(50% + 396px)!important;right:16px!important;top:70px!important;max-width:360px!important;max-height:calc(100vh - 100px);overflow-y:auto}
 }
 </style>
 </head>
@@ -192,19 +184,6 @@ body.auth-locked > :not(#authGate){display:none!important}
   <h2>⚡ Lightning – Golden Eagle</h2>
   <div id="lxbody" style="font-size:.9rem"></div>
 </div>
-  <section class="card" id="mtDataCard" aria-label="Lockie's MTData" style="display:none">
-    <h2>🚛 Lockie's MTData Hawk-Eye</h2>
-    <p>Sign in directly to MTData below. If the provider blocks embedded access, use Open Full Website.</p>
-    <div class="actions">
-      <button type="button" class="sec" id="mtEmbedToggle">Show MTData inside window</button>
-      <a id="mtDataOpen" href="https://mdc04.mtdata.com.au/Hawkeye/" target="_blank" rel="noopener noreferrer">↗ Open Full Website</a>
-    </div>
-    <div id="mtEmbedWrap" style="display:none;margin-top:12px">
-      <iframe id="mtEmbed" title="MTData Hawk-Eye" referrerpolicy="strict-origin-when-cross-origin" style="width:100%;height:440px;border:1px solid #56616d;border-radius:8px;background:#fff" loading="lazy"></iframe>
-      <p class="service-hint">If the frame stays blank or says connection refused, MTData does not allow embedding. Open Full Website instead.</p>
-    </div>
-    <p id="mtDataHelp" role="status"></p>
-  </section>
   <div class="card" id="etacard" style="display:none">
   <h2 style="display:flex;align-items:center;justify-content:space-between">📦 Special orders – awaiting delivery
     <button type="button" class="sec" id="etamanage" style="padding:5px 10px;font-size:.8rem">Update / tick off</button></h2>
@@ -304,7 +283,7 @@ body.auth-locked > :not(#authGate){display:none!important}
     <p style="font-size:.8rem;color:#aaa">CJD checklist requires supervisor/manager signature; a typed name here is a tracking field, not a digital signature.</p>
 
     <label>Notes / follow-up</label><textarea id="wNotes"></textarea>
-    <div class="actions"><button type="submit" id="wSaveButton">Save warranty</button>
+    <div class="actions"><button type="submit" id="wSaveButton">Save warranty</button><button type="button" class="sec" id="emailWarranty">✉ Email warranty</button>
       <button type="button" class="sec" id="wCancel">Clear / cancel edit</button></div>
   </form>
   <h2 style="margin-top:18px">Warranty Claims</h2>
@@ -450,7 +429,7 @@ body.auth-locked > :not(#authGate){display:none!important}
   <label class="check"><input type="checkbox" class="chk"> Parts booked in/out, stock sheet updated</label>
   <label class="check"><input type="checkbox" class="chk"> Hazards made safe / signed off</label>
   <label class="check"><input type="checkbox" class="chk"> Store & vehicles/equipment locked or secured</label>
-  <div class="actions"><button type="submit">Submit handover</button><button type="reset" class="sec">Clear</button></div>
+  <div class="actions"><button type="submit">Submit handover</button><button type="button" class="sec" id="emailHandover">✉ Email handover</button><button type="reset" class="sec">Clear</button></div>
 </form>
 
 <details class="card" id="rosterbox">
@@ -555,40 +534,8 @@ function entry(h){
     :`<button data-ack="${h.id}" ${h.to!==$("from").value?"disabled":""}>I've read this (${h.to})</button>`}
   <button class="sec" data-copy="${h.id}">Copy</button><button class="sec" data-del="${h.id}">Delete</button></div></div>`;
 }
-  const MT_URL="https://mdc04.mtdata.com.au/Hawkeye/";
-  function renderMtData(){
-    const name=String($("from").value||"").trim().toLowerCase();
-    const signedOn=ss.on.some(c=>String(c.user||"").trim().toLowerCase()===name);
-    const visible=appAuthorized && signedOn && ["lockie","lachlan","lachlan morris"].includes(name)
-      && $("wHomeContent").style.display!=="none" && $("warrantySection").style.display==="none";
-    $("mtDataCard").style.display=visible?"block":"none";
-    if(!visible){$("mtEmbedWrap").style.display="none";$("mtEmbed").removeAttribute("src");}
-    $("mtDataHelp").textContent="MTData login remains on the official MTData website; no password is stored here.";
-    updateRightRail();
-  }
-  $("mtEmbedToggle").onclick=()=>{
-    const wrap=$("mtEmbedWrap"),open=wrap.style.display!=="none";
-    wrap.style.display=open?"none":"block";
-    if(open)$("mtEmbed").removeAttribute("src");
-    else $("mtEmbed").src=MT_URL;
-    $("mtEmbedToggle").textContent=open?"Show MTData inside window":"Hide embedded MTData";
-    updateRightRail();
-  };
-  ["wHome","wOpen","serviceNav","scheduleNav"].forEach(id=>
-    $(id).addEventListener("click",()=>setTimeout(renderMtData,0)));
-  function updateRightRail(){
-    const panel=$("mtDataCard"), orders=$("etacard");
-    if(window.innerWidth<1300){orders.style.removeProperty("top");orders.style.removeProperty("max-height");return}
-    const isShown=getComputedStyle(panel).display!=="none";
-    const top=isShown?Math.ceil(panel.getBoundingClientRect().bottom+20):70;
-    orders.style.top=top+"px";
-    orders.style.maxHeight="calc(100vh - "+(top+16)+"px)";
-  }
-  window.addEventListener("resize",updateRightRail);
-  new ResizeObserver(updateRightRail).observe($("mtDataCard"));
   function render(){
     spawnRecurring();
-    renderMtData();
   const me=$("from").value, sup=isSup();
   if(!sup)supMode=false;
   // supervisor controls + handovers-only view
@@ -1235,7 +1182,7 @@ Raised by: ${esc(String(w.by||""))}</pre>
     ].filter(([k,v])=>v).map(([k,v])=>k+": "+v).join("\n"))}</pre>
     <small>Checklist completed: ${Object.keys(warrantyChecklistFields).filter(k=>w[k]).length} / ${Object.keys(warrantyChecklistFields).length}</small></details>
     <div class="actions"><button type="button" data-wedit="${w.id}">Edit</button>
-    <button type="button" class="sec" data-wdel="${w.id}">Delete</button></div></div>`).join("")
+    <button type="button" class="sec" data-wdel="${w.id}">Delete</button><button type="button" class="sec" data-wemail="${w.id}">✉ Email</button></div></div>`).join("")
     ||"<p>No matching warranty claims.</p>";
 }
 document.addEventListener("click",e=>{
@@ -1797,6 +1744,64 @@ syncUI();
   new ResizeObserver(alignWorkshopPanels).observe($("lxcard"));
   window.addEventListener("resize",alignWorkshopPanels);
   alignWorkshopPanels();
-  </script>
+  
+// Email templates open the user's default mail application for review; nothing is sent automatically.
+function openEmailDraft(subject,body){
+  const link='mailto:?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+  if(link.length>16000){alert('This email is too long for a mail link. Shorten the notes before emailing.');return;}
+  const a=document.createElement('a');a.href=link;document.body.appendChild(a);a.click();a.remove();
+}
+function handoverEmail(){
+  const v=id=>($(id)?.value||'').trim();
+  const subject='Shift Handover | '+(v('date')||'Date not set')+' | '+v('shift')+' | '+v('from')+' to '+v('to');
+  const body=[
+    'Hi team,','',
+    'Please see the shift handover below.','',
+    'Date: '+v('date'),'Shift: '+v('shift'),'Handing over: '+v('from'),'Taking over: '+v('to'),'',
+    'JOBS IN PROGRESS',v('inprog')||'None noted','',
+    'JOBS COMPLETED',v('done')||'None noted','',
+    'PARTS / STOCK',v('parts')||'None noted','',
+    'EQUIPMENT / VEHICLES',v('equip')||'None noted','',
+    'SAFETY / HAZARDS',v('safety')||'None noted','',
+    'OTHER NOTES',v('notes')||'None noted','',
+    'Please review outstanding actions and advise if clarification is required.','',
+    'Regards,',v('from')
+  ].join('\n');
+  openEmailDraft(subject,body);
+}
+function warrantyEmail(w){
+  const value=(key)=>String(w[key]||'Not recorded');
+  const subject='Warranty Claim | '+value('asset')+' | '+value('part')+' | '+(w.claimNo||'New claim');
+  const body=[
+    'Hi team,','',
+    'Please review the warranty claim details below.','',
+    'Asset: '+value('asset'),'Supplier: '+value('supplier'),'Work order: '+value('wo'),
+    'Part number: '+value('part'),'Description: '+value('description'),
+    'Warranty number: '+value('warrantyNo'),'Claim number: '+value('claimNo'),
+    'Date raised: '+value('date'),'Claim status: '+value('status'),'',
+    'REASON FOR CLAIM',value('reason'),'','ASSESSMENT / FOLLOW-UP',value('notes'),'',
+    'Return to supplier: '+(w.returnedToSupplier?'Yes':'No'),
+    'Return to stores: '+(w.returnedToStores?'Yes':'No'),
+    'Resolution: '+value('resolution'),'',
+    'Please advise the next steps, claim approval or any additional documentation required.','',
+    'Regards,',w.updatedBy||w.by||$('from').value
+  ].join('\n');
+  openEmailDraft(subject,body);
+}
+$('emailHandover').addEventListener('click',handoverEmail);
+$('emailWarranty').addEventListener('click',()=>{
+  const w={};Object.entries(warrantyFields).forEach(([key,id])=>w[key]=$(id).value.trim());
+  w.returnedToSupplier=$('wSupplierReturn').checked;
+  w.returnedToStores=$('wStores').checked;
+  w.by=$('from').value;
+  warrantyEmail(w);
+});
+document.addEventListener('click',e=>{
+  const button=e.target.closest('[data-wemail]');if(!button)return;
+  const w=warranties.find(x=>String(x.id)===button.dataset.wemail);
+  if(w)warrantyEmail(w);
+});
+
+</script>
 </body>
 </html>
