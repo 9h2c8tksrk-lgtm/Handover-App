@@ -113,6 +113,19 @@ body.auth-locked > :not(#authGate){display:none!important}
   #lxcard{top:70px!important;max-height:none!important;overflow:visible!important}
   #maintenanceCard{top:var(--workshop-top,270px)!important;max-height:calc(100vh - var(--workshop-top,270px) - 16px)!important;overflow-y:auto!important}
 }
+
+/* Snapshot email preview */
+#snapshotModal{position:fixed;inset:0;background:#000d;z-index:1001;display:none;align-items:center;justify-content:center;padding:12px}
+#snapshotModal .snapshot-shell{width:min(800px,100%);max-height:94vh;overflow:auto;background:#222831;padding:14px;border-radius:12px}
+#snapshotPreview{background:#1b1f24;color:#f4f4f4;border:1px solid #515b66;border-radius:10px;overflow:hidden}
+#snapshotPreview .snap-head{background:#e8a317;color:#171717;padding:18px 20px;font-weight:750;font-size:20px}
+#snapshotPreview .snap-meta{background:#303741;padding:12px 20px;color:#fff}
+#snapshotPreview .snap-body{padding:14px}
+#snapshotPreview .snap-section{margin:0 0 12px;background:#262c33;border-radius:8px;border:1px solid #3c4650;overflow:hidden}
+#snapshotPreview .snap-section h3{margin:0;background:#353f49;color:#e8a317;font-size:15px;padding:10px 12px}
+#snapshotPreview .snap-section p{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:12px;line-height:1.45}
+#snapshotPreview .snap-foot{padding:12px 20px;color:#bfc8d1;font-size:12px}
+#snapshotModal .actions{justify-content:flex-end}
 </style>
 </head>
 <body class="auth-locked">
@@ -1333,7 +1346,21 @@ function printBooking(m){
   const safe=v=>esc(String(v||""));
   const html=`<!doctype html><html><head><title>Picking List</title><style>body{font:16px Arial;margin:30px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #777;padding:9px;text-align:left}</style></head><body>
     <h1>Service Parts Picking List</h1><p>Asset: ${safe(m.asset)} | Model: ${safe(m.model)} | Service: ${safe(m.service)} | Due: ${safe(pmEntryDate(m))} ${safe(pmEntryTime(m))}</p>
-    <table><tr><th>Part Number</th><th>Description</th><th>Qty</th><th>Status</th></tr>${(m.pickParts||[]).map(p=>`<tr><td>${safe(p.part)}</td><td>${safe(p.description)}</td><td>${Number(p.qty)}</td><td>${safe(p.status||"Not Picked")}</td></tr>`).join("")}</table></body></html>`;
+    <table><tr><th>Part Number</th><th>Description</th><th>Qty</th><th>Status</th></tr>${(m.pickParts||[]).map(p=>`<tr><td>${safe(p.part)}</td><td>${safe(p.description)}</td><td>${Number(p.qty)}</td><td>${safe(p.status||"Not Picked")}</td></tr>`).join("")}</table><div id="snapshotModal" role="dialog" aria-modal="true" aria-label="Email snapshot preview">
+  <div class="snapshot-shell">
+    <h2>✉ Handover Email Snapshot</h2>
+    <p style="color:#cbd1d6;font-size:.9rem">A styled snapshot of the current handover. Copy it into an Outlook email to preserve colours, or print/save it as a PDF attachment.</p>
+    <div id="snapshotPreview"></div>
+    <div class="actions">
+      <button type="button" id="snapshotCopy">📋 Copy styled snapshot</button>
+      <button type="button" class="sec" id="snapshotPrint">🖨 Print / Save PDF</button>
+      <button type="button" class="sec" id="snapshotEmail">✉ Open email draft</button>
+      <button type="button" class="sec" id="snapshotClose">Close</button>
+    </div>
+    <p id="snapshotStatus" role="status" style="color:#bde7c4"></p>
+  </div>
+</div>
+</body></html>`;
   win.document.write(html);win.document.close();win.focus();
   // Browsers cannot verify physical printing; request confirmation after print dialogue.
   win.onafterprint=()=>{
@@ -1753,22 +1780,54 @@ function openEmailDraft(subject,body){
 }
 function handoverEmail(){
   const v=id=>($(id)?.value||'').trim();
-  const subject='Shift Handover | '+(v('date')||'Date not set')+' | '+v('shift')+' | '+v('from')+' to '+v('to');
-  const body=[
-    'Hi team,','',
-    'Please see the shift handover below.','',
-    'Date: '+v('date'),'Shift: '+v('shift'),'Handing over: '+v('from'),'Taking over: '+v('to'),'',
-    'JOBS IN PROGRESS',v('inprog')||'None noted','',
-    'JOBS COMPLETED',v('done')||'None noted','',
-    'PARTS / STOCK',v('parts')||'None noted','',
-    'EQUIPMENT / VEHICLES',v('equip')||'None noted','',
-    'SAFETY / HAZARDS',v('safety')||'None noted','',
-    'OTHER NOTES',v('notes')||'None noted','',
-    'Please review outstanding actions and advise if clarification is required.','',
-    'Regards,',v('from')
-  ].join('\n');
-  openEmailDraft(subject,body);
+  const date=v('date')||new Date().toLocaleDateString('en-AU');
+  const from=v('from')||'Not specified',to=v('to')||'Not specified',shift=v('shift')||'Shift';
+  const subject='Shift Handover | '+date+' | '+shift+' | '+from+' to '+to;
+  const sections=[
+    ['🔧 Jobs in progress',v('inprog')],['✅ Jobs completed',v('done')],
+    ['📦 Parts / stock',v('parts')],['🚛 Equipment / vehicles',v('equip')],
+    ['⚠️ Safety / hazards',v('safety')],['📋 Other notes',v('notes')]
+  ];
+  const safe=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const preview=$('snapshotPreview');preview.replaceChildren();
+  const head=document.createElement('div');head.className='snap-head';head.textContent='SHIFT HANDOVER | '+shift.toUpperCase();preview.appendChild(head);
+  const meta=document.createElement('div');meta.className='snap-meta';meta.textContent='📅 '+date+'   •   👤 '+from+' → '+to;preview.appendChild(meta);
+  const body=document.createElement('div');body.className='snap-body';
+  sections.forEach(([title,text])=>{
+    const box=document.createElement('section');box.className='snap-section';
+    const h=document.createElement('h3');h.textContent=title;
+    const p=document.createElement('p');p.textContent=text||'None noted';box.append(h,p);body.appendChild(box);
+  });
+  preview.appendChild(body);
+  const foot=document.createElement('div');foot.className='snap-foot';foot.textContent='Shift Handover • Prepared '+new Date().toLocaleString('en-AU')+' • Review details before sending';preview.appendChild(foot);
+  window.handoverSnapshotSubject=subject;
+  window.handoverSnapshotPlain=['SHIFT HANDOVER',date,shift,from+' to '+to,'',...sections.flatMap(([title,text])=>[title,text||'None noted',''])].join('\n');
+  $('snapshotStatus').textContent='';$('snapshotModal').style.display='flex';$('snapshotClose').focus();
 }
+$('snapshotClose').onclick=()=>$('snapshotModal').style.display='none';
+$('snapshotCopy').onclick=async()=>{
+  const preview=$('snapshotPreview');
+  // Inline styling is important because Outlook strips embedded stylesheets.
+  const sections=[...preview.querySelectorAll('.snap-section')].map(el=>{
+    const h=el.querySelector('h3'),p=el.querySelector('p');
+    return '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:12px;border:1px solid #46505a;background:#262c33;color:#ffffff"><tr><td style="background:#353f49;color:#e8a317;font-weight:bold;padding:10px">'+h.innerHTML+'</td></tr><tr><td style="padding:12px;white-space:pre-wrap">'+p.innerHTML.replace(/\n/g,'<br>')+'</td></tr></table>';
+  }).join('');
+  const html='<div style="font-family:Arial,sans-serif;background:#1b1f24;color:#fff;padding:16px;max-width:740px">'+
+    '<div style="background:#e8a317;color:#171717;padding:18px;font-size:20px;font-weight:bold">'+preview.querySelector('.snap-head').innerHTML+'</div>'+
+    '<div style="background:#303741;padding:12px;color:#fff">'+preview.querySelector('.snap-meta').innerHTML+'</div><div style="padding:14px">'+sections+'</div></div>';
+  try{
+    if(!navigator.clipboard?.write||!window.ClipboardItem)throw Error('Rich clipboard unavailable');
+    await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([window.handoverSnapshotPlain],{type:'text/plain'})})]);
+    $('snapshotStatus').textContent='Styled snapshot copied. Open Outlook, create a new email and paste (Ctrl+V).';
+  }catch(e){$('snapshotStatus').textContent='Rich copy unavailable in this browser. Use Print / Save PDF and attach it to your email.';}
+};
+$('snapshotPrint').onclick=()=>{
+  const win=window.open('','_blank');if(!win){alert('Allow pop-ups to print the snapshot.');return}
+  const html=$('snapshotPreview').outerHTML;
+  win.document.write('<!doctype html><html><head><title>Shift Handover Snapshot</title><style>body{font:14px Arial;background:#fff;color:#111;margin:24px}.snap-head{background:#e8a317;padding:18px;font-size:20px;font-weight:bold}.snap-meta{background:#303741;color:#fff;padding:12px}.snap-body{padding:12px}.snap-section{border:1px solid #aaa;margin:0 0 10px;break-inside:avoid}.snap-section h3{background:#353f49;color:#e8a317;margin:0;padding:10px}.snap-section p{white-space:pre-wrap;padding:12px;margin:0}.snap-foot{font-size:11px;color:#555}</style></head><body>'+html+'</body></html>');
+  win.document.close();win.focus();win.print();
+};
+$('snapshotEmail').onclick=()=>openEmailDraft(window.handoverSnapshotSubject,window.handoverSnapshotPlain+'\n\nFor the colour-formatted version, paste the copied snapshot into this message or attach the saved PDF.');
 function warrantyEmail(w){
   const value=(key)=>String(w[key]||'Not recorded');
   const subject='Warranty Claim | '+value('asset')+' | '+value('part')+' | '+(w.claimNo||'New claim');
