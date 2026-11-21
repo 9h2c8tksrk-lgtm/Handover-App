@@ -62,6 +62,13 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
 #lxcard.lx-danger{background:#7a2a2a}
 #lxcard.lx-danger h2{color:#fff}
 #lxcard small{color:#bbb}
+#mtDataCard{display:none}
+#mtDataCard p{font-size:.85rem;color:#c4cbd1;margin:6px 0 10px}
+#mtDataCard .actions{align-items:center}
+#mtDataCard a{display:inline-block;background:#e8a317;color:#111;text-decoration:none;font-weight:600;border-radius:6px;padding:9px 12px}
+#mtDataCard button{padding:8px 10px;font-size:.85rem}
+@media(max-width:1299px){#mtDataCard{width:100%}}
+
 
 /* Planned Maintenance Window: left of Daily Planner on wide screens */
 #maintenanceCard{width:100%}
@@ -75,6 +82,9 @@ table.r tr.today td,table.r tr.today th{outline:2px solid #e8a317}
   #lxcard{position:fixed;top:70px;right:calc(50% + 396px);left:16px;
     width:auto;max-width:360px;max-height:190px;overflow-y:auto;z-index:6}
   #maintenanceCard{top:270px;max-height:calc(100vh - 290px)}
+  /* Lockie's panel uses the right rail; special orders follow below it. */
+  #mtDataCard{position:fixed;top:70px;left:calc(50% + 396px);right:16px;max-width:360px;z-index:6}
+  #etacard{top:245px;max-height:calc(100vh - 265px)}
 }
 
 /* Authentication gate: visual access control only; database RLS is mandatory. */
@@ -174,7 +184,16 @@ body.auth-locked > :not(#authGate){display:none!important}
   <h2>⚡ Lightning – Golden Eagle</h2>
   <div id="lxbody" style="font-size:.9rem"></div>
 </div>
-<div class="card" id="etacard" style="display:none">
+  <section class="card" id="mtDataCard" aria-label="Lockie's MTData" style="display:none">
+    <h2>🚛 Lockie's MTData</h2>
+    <p>Open your MTData Hawk-Eye login securely in a separate tab. Your MTData password is never saved here.</p>
+    <div class="actions">
+      <a id="mtDataOpen" href="#" target="_blank" rel="noopener noreferrer" style="display:none">🔐 Open MTData Login</a>
+      <button type="button" class="sec" id="mtDataSet">Set login link</button>
+    </div>
+    <p id="mtDataHelp" role="status"></p>
+  </section>
+  <div class="card" id="etacard" style="display:none">
   <h2 style="display:flex;align-items:center;justify-content:space-between">📦 Special orders – awaiting delivery
     <button type="button" class="sec" id="etamanage" style="padding:5px 10px;font-size:.8rem">Update / tick off</button></h2>
   <div id="etasummary" style="overflow-x:auto"></div>
@@ -383,7 +402,7 @@ body.auth-locked > :not(#authGate){display:none!important}
   <div class="tabs"><button type="button" class="active" data-ttab="open" id="tabopen">📋 To do</button><button type="button" data-ttab="done" id="tabdone">✅ Completed</button></div>
   <div class="actions" id="tactions" style="margin:0 0 10px"><button type="button" id="tscan">📷 Scan part to order</button>
   <button type="button" class="sec" id="etaopen">📦 Special order ETA</button>
-  <a href="https://9h2c8tksrk-lgtm.github.io/Parts-tracker/" target="_blank" rel="noopener"><button type="button" class="sec">🔩 Open Parts Tracker</button></a></div>
+  </div>
   <form id="tform" class="row" style="align-items:stretch;flex-wrap:wrap">
     <select id="ttype" style="flex:0 0 120px"><option value="task">Task</option><option value="order">Order part</option></select>
     <input id="ttext" placeholder="Add item…" required style="flex:3">
@@ -522,8 +541,32 @@ function entry(h){
     :`<button data-ack="${h.id}" ${h.to!==$("from").value?"disabled":""}>I've read this (${h.to})</button>`}
   <button class="sec" data-copy="${h.id}">Copy</button><button class="sec" data-del="${h.id}">Delete</button></div></div>`;
 }
-function render(){
-  spawnRecurring();
+  // Lockie's personal link is local to this browser, not shared with the crew.
+  const MT_LINK_KEY="handover.lockie.mtdata.url";
+  function renderMtData(){
+    const signedOn=ss.on.some(c=>c.user==="Lockie");
+    const visible=appAuthorized && signedOn && $("from").value==="Lockie" && $("wHomeContent").style.display!=="none";
+    $("mtDataCard").style.display=visible?"":"none";
+    const url=localStorage.getItem(MT_LINK_KEY)||"";
+    $("mtDataOpen").style.display=url?"":"none";
+    if(url)$("mtDataOpen").href=url;
+    $("mtDataHelp").textContent=url?"Sign in directly on the official MTData website.":"Set the official MTData login URL once on this device.";
+  }
+  ["wHome","wOpen","serviceNav","scheduleNav"].forEach(id=>
+    $(id).addEventListener("click",()=>setTimeout(renderMtData,0)));
+  $("mtDataSet").onclick=()=>{
+    if($("mtDataCard").style.display==="none")return;
+    const value=prompt("Paste the official MTData Hawk-Eye login URL (https://...):",localStorage.getItem(MT_LINK_KEY)||"");
+    if(value===null)return;
+    const input=value.trim();
+    if(!input){localStorage.removeItem(MT_LINK_KEY);renderMtData();return}
+    try{const url=new URL(input);if(url.protocol!=="https:")throw Error("HTTPS required");
+      if(!confirm("Only save this link if you recognise it as the official MTData login website. Continue?"))return;
+      localStorage.setItem(MT_LINK_KEY,url.href);renderMtData();
+    }catch{alert("Enter a valid HTTPS login URL.")}
+  };
+  function render(){
+    spawnRecurring();
   const me=$("from").value, sup=isSup();
   if(!sup)supMode=false;
   // supervisor controls + handovers-only view
