@@ -1056,13 +1056,22 @@ window.addEventListener("online",lxConnect);
       arrivals.forEach(m => {
         const asset = m.asset || "an unnamed asset";
 
+        const spokenAsset = m.asset
+          ? String(m.asset)
+              .toUpperCase()
+              .replace(/([A-Z])/g, "$1 ")
+              .replace(/([0-9])/g, "$1 ")
+              .replace(/\s+/g, " ")
+              .trim()
+          : "an unnamed asset";
+
         const service = m.service || m.description || "scheduled maintenance";
 
         const pending = (m.pickParts || []).filter(
           p => p.status !== "Picked"
         );
 
-        briefSpeech += asset +
+        briefSpeech += spokenAsset +
           " is due in for " + service + ". ";
 
         if (pending.length) {
