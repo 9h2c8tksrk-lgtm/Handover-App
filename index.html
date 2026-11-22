@@ -4,7 +4,48 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shift Handover</title>
-<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://unpkg.com/html5-qrcode">
+// AUTOMATIC LIVE VERSION CHECKER
+(function () {
+  const CHECK_INTERVAL = 60000;
+  const VERSION_FILE = "./version.json";
+
+  let currentVersion = null;
+
+  async function checkForUpdates() {
+    try {
+      const response = await fetch(
+        VERSION_FILE + "?t=" + Date.now(),
+        { cache: "no-store" }
+      );
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+
+      if (!currentVersion) {
+        currentVersion = data.version;
+        return;
+      }
+
+      if (data.version !== currentVersion) {
+        console.log("New Handover App version detected");
+
+        window.location.reload();
+      }
+    } catch (error) {
+      console.log("Version check unavailable");
+    }
+  }
+
+  checkForUpdates();
+
+  setInterval(checkForUpdates, CHECK_INTERVAL);
+
+  window.addEventListener("focus", checkForUpdates);
+})();
+
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}
