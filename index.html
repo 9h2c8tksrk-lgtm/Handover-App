@@ -126,6 +126,12 @@ body.auth-locked > :not(#authGate){display:none!important}
 #snapshotPreview .snap-section p{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:12px;line-height:1.45}
 #snapshotPreview .snap-foot{padding:12px 20px;color:#bfc8d1;font-size:12px}
 #snapshotModal .actions{justify-content:flex-end}
+
+  /* End-of-shift handover reminder */
+  #handoverReminder{position:fixed;inset:0;background:#000c;z-index:900;display:none;align-items:center;justify-content:center;padding:16px}
+  #handoverReminder .card{width:min(440px,100%);border:2px solid #e8a317;box-shadow:0 15px 55px #0009}
+  #handoverReminder p{line-height:1.5}
+  #handoverReminder .actions button{flex:1;min-width:145px}
 </style>
 </head>
 <body class="auth-locked">
@@ -152,6 +158,18 @@ body.auth-locked > :not(#authGate){display:none!important}
       <div class="actions">
         <button type="button" id="briefReplay" class="sec">🔊 Hear briefing again</button>
         <button type="button" id="briefContinue">Continue to handover</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="handoverReminder" role="dialog" aria-modal="true" aria-labelledby="reminderTitle">
+    <div class="card">
+      <h2 id="reminderTitle">🔔 Handover reminder</h2>
+      <p id="reminderMessage"></p>
+      <div class="actions">
+        <button type="button" id="reminderOpen">📝 Complete my handover</button>
+        <button type="button" id="reminderDone" class="sec">✅ Already completed</button>
+        <button type="button" id="reminderSnooze" class="sec">⏰ Remind me in 15 minutes</button>
       </div>
     </div>
   </div>
