@@ -19,7 +19,7 @@
     const container = document.createElement("div");
     container.id = "roadtrain-animation-container";
     container.style.cssText =
-      "width:100%;height:125px;overflow:hidden;position:relative;margin:12px 0;pointer-events:none;";
+      "width:100%;height:230px;overflow:hidden;position:relative;margin:12px 0;pointer-events:none;";
 
     section.insertAdjacentElement("afterend", container);
 
