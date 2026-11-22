@@ -1029,12 +1029,51 @@ window.addEventListener("online",lxConnect);
       (w.description?" • "+w.description:"")+" • "+(w.status||"Status not entered")+
       (w.date?" • Raised "+w.date:""));
           const unpicked=arrivals.reduce((n,m)=>n+(m.pickParts||[]).filter(p=>p.status!=="Picked").length,0);
-      briefSpeech=greeting+", "+name+". Welcome back. "+
-      (arrivals.length?"You have "+arrivals.length+" asset"+(arrivals.length===1?"":"s")+" due in the workshop today. ":"No assets are scheduled in the workshop today. ")+
-              (unpicked?"There are "+unpicked+" service parts lines still to prepare. ":"No service parts remain to be picked for today's booked services. ")+
-        (overdue.length?"There are "+overdue.length+" overdue special order"+(overdue.length===1?"":"s")+". ":"There are no overdue special orders. ")+
-      (outstanding.length?"You have "+outstanding.length+" outstanding warranty claim"+(outstanding.length===1?"":"s")+". ":"There are no outstanding warranty claims. ")+
-      affirmation;
+
+    const firstName = name.toLowerCase().includes("lachlan")
+      ? "Lockie"
+      : name.split(" ")[0];
+
+    const period = hour < 12
+      ? "this morning"
+      : hour < 17
+        ? "this afternoon"
+        : "this evening";
+
+    const count = arrivals.length;
+
+    briefSpeech = greeting + ", " + firstName + ". ";
+
+    if (count === 0) {
+      briefSpeech += "You have no scheduled workshop arrivals " + period + ". ";
+    } else {
+      briefSpeech += "You have " +
+        (count === 1 ? "one" : count) +
+        " scheduled arrival" +
+        (count === 1 ? "" : "s") +
+        " " + period + ". ";
+
+      arrivals.forEach(m => {
+        const asset = m.asset || "an unnamed asset";
+
+        const service = m.service || m.description || "scheduled maintenance";
+
+        const pending = (m.pickParts || []).filter(
+          p => p.status !== "Picked"
+        );
+
+        briefSpeech += asset +
+          " is due in for " + service + ". ";
+
+        if (pending.length) {
+          briefSpeech +=
+            "The parts still need to be picked. ";
+        } else if ((m.pickParts || []).length) {
+          briefSpeech +=
+            "All service parts have been picked. ";
+        }
+      });
+    }
     $("dailyBriefing").style.display="flex";
     $("briefContinue").focus();
     briefSay(briefSpeech);
