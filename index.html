@@ -2162,5 +2162,82 @@ window.addEventListener("focus", checkHandoverReminder);
 // END SAFE AUTO REFRESH V3
 </script>
 <script src="roadtrain-container.js" defer></script>
+<style>
+body.bc-active main > :not(#warrantyNav):not(#bcPage){display:none!important}
+#bcPage{display:none;max-width:760px;margin:0 auto 18px;padding:16px;border:1px solid #e8a317;border-radius:12px;background:#262c33}
+#bcPage .bc-row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}#bcPage .bc-row>*{flex:1;min-width:130px}
+#bcPage button{min-height:45px}#bcPage .bc-list{padding:9px;border:1px solid #46505a;border-radius:7px;margin:7px 0;overflow-wrap:anywhere}
+#bcPage small{color:#c3c8cc}#bcPage #bcReader{max-width:440px;margin:auto}#bcPage #bcStatus{color:#e8a317;min-height:25px}
+</style>
+<section id="bcPage" aria-label="Barcode Collector">
+<h2>📷 Barcode Collector</h2><p>Golden Eagle Stores · Lachlan only · Stored on this device</p>
+<div id="bcStatus" role="status" aria-live="polite"></div>
+<label for="bcPart">Business Central part number</label><input id="bcPart" placeholder="Enter or select part number" list="bcKnown" autocomplete="off"><datalist id="bcKnown"></datalist>
+<label for="bcDesc">Description (optional)</label><input id="bcDesc" placeholder="Part description">
+<div class="bc-row"><button type="button" id="bcStart">📷 Start scanner</button><button type="button" class="sec" id="bcStop">Stop scanner</button></div>
+<div id="bcReader"></div>
+<label for="bcCode">Barcode value (scan or enter)</label><input id="bcCode" placeholder="Scan barcode or enter value" autocomplete="off">
+<div class="bc-row"><select id="bcType" aria-label="Barcode type"><option>Unknown</option><option>Business Central</option><option>Supplier</option><option>Manufacturer</option></select><button type="button" id="bcAdd">+ Add barcode</button></div>
+<label for="bcPhoto">Photograph packaging for reference (not automatic OCR)</label><input id="bcPhoto" type="file" accept="image/*" capture="environment"><small>Photo is for visual reference only and is not uploaded or stored. Read the part number from the photo and enter it above.</small>
+<h3>Pending barcodes</h3><div id="bcPending"></div>
+<div class="bc-row"><button type="button" id="bcSave">✅ Save &amp; Next</button><button type="button" class="sec" id="bcClear">Clear pending</button></div>
+<h3>Saved parts: <span id="bcCount">0</span></h3><label for="bcFind">Find saved part</label><input id="bcFind" placeholder="Search part, description or barcode"><div id="bcSaved"></div>
+<div class="bc-row"><button type="button" id="bcExport">⬇ Export CSV</button><button type="button" class="sec" id="bcBackup">⬇ Backup JSON</button><button type="button" class="sec" id="bcImport">Import JSON backup</button></div><input id="bcImportFile" type="file" accept="application/json,.json" style="display:none">
+<small>Export frequently. Data is saved only in this browser on this device; it does not sync to Business Central or other phones.</small>
+</section>
+<script>
+(function(){
+'use strict';
+const el=id=>document.getElementById(id), key='golden-eagle.barcode-collector.v1';
+const allowedEmail='lachlan.morris@mgmgroup.com.au';
+let rows=[],pending=[],camera=null,open=false,lastCode='',lastTime=0;
+try{const x=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(x))rows=x;}catch{}
+const authorized=()=>typeof appAuthorized!=='undefined'&&appAuthorized&&typeof sbUser!=='undefined'&&sbUser&&String(sbUser.email||'').toLowerCase()===allowedEmail;
+const status=t=>el('bcStatus').textContent=t;
+const norm=t=>String(t||'').trim();
+const partKey=t=>norm(t).toUpperCase();
+const saveLocal=()=>{try{localStorage.setItem(key,JSON.stringify(rows));return true}catch(e){status('Save failed: browser storage unavailable or full. Export your data.');return false}};
+function render(){
+ el('bcCount').textContent=rows.length;
+ el('bcKnown').replaceChildren(...rows.map(r=>new Option(r.part,r.part)));
+ el('bcPending').replaceChildren();pending.forEach((b,i)=>{const d=document.createElement('div');d.className='bc-list';d.textContent=b.code+' · '+b.type+' ';const btn=document.createElement('button');btn.type='button';btn.className='sec';btn.textContent='Remove';btn.onclick=()=>{pending.splice(i,1);render()};d.append(btn);el('bcPending').append(d)});
+ el('bcSaved').replaceChildren();const q=norm(el('bcFind').value).toLowerCase();
+ rows.filter(r=>!q||[r.part,r.description,...r.barcodes.map(b=>b.code)].some(x=>String(x).toLowerCase().includes(q))).slice(0,80).forEach(r=>{
+ const d=document.createElement('div');d.className='bc-list';const title=document.createElement('strong');title.textContent=r.part+' · '+(r.description||'No description');d.append(title);
+ for(const b of r.barcodes){const line=document.createElement('div');line.textContent=b.code+' ('+b.type+')';d.append(line)}
+ const select=document.createElement('button');select.type='button';select.className='sec';select.textContent='Select part';select.onclick=()=>{el('bcPart').value=r.part;el('bcDesc').value=r.description;status('Selected '+r.part)};d.append(select);el('bcSaved').append(d)
+ });
+}
+function addBarcode(code){code=norm(code);if(!code)return status('Scan or enter a barcode.');if(!norm(el('bcPart').value))return status('Identify the part first.');
+ const conflict=rows.find(r=>r.barcodes.some(b=>b.code===code)&&partKey(r.part)!==partKey(el('bcPart').value));
+ if(conflict)return status('DUPLICATE: '+code+' belongs to '+conflict.part+'. Nothing added.');
+ if(pending.some(b=>b.code===code)||rows.some(r=>partKey(r.part)===partKey(el('bcPart').value)&&r.barcodes.some(b=>b.code===code)))return status('Barcode already recorded for this part.');
+ pending.push({code,type:el('bcType').value,at:new Date().toISOString()});el('bcCode').value='';status('Added '+code+'. Scan another or Save & Next.');render();
+}
+async function stop(){if(camera){try{await camera.stop()}catch{}try{camera.clear()}catch{}camera=null}}
+el('bcStart').onclick=async()=>{if(!authorized())return status('Only Lachlan can use Barcode Collector.');if(camera)return;
+ if(!window.Html5Qrcode)return status('Scanner library unavailable. Check connection or enter barcode manually.');
+ try{camera=new Html5Qrcode('bcReader');await camera.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:150}},code=>{if(code===lastCode&&Date.now()-lastTime<2000)return;lastCode=code;lastTime=Date.now();addBarcode(code)});status('Camera ready. Scan barcodes for the selected part.')}catch(e){status('Camera unavailable: '+e.message+'. Use manual entry.');await stop()}
+};
+el('bcStop').onclick=stop;el('bcAdd').onclick=()=>addBarcode(el('bcCode').value);el('bcCode').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addBarcode(el('bcCode').value)}});
+el('bcSave').onclick=()=>{if(!authorized())return;const part=norm(el('bcPart').value),description=norm(el('bcDesc').value);if(!part)return status('Part number required.');if(!pending.length)return status('Add at least one barcode.');
+ const other=rows.find(r=>partKey(r.part)===partKey(part));const now=new Date().toISOString();
+ if(other){for(const b of pending){if(!other.barcodes.some(x=>x.code===b.code))other.barcodes.push(b)}if(description)other.description=description;other.updatedAt=now}
+ else rows.push({part,description,barcodes:[...pending],updatedAt:now});
+ if(!saveLocal())return;pending=[];el('bcPart').value='';el('bcDesc').value='';el('bcPhoto').value='';render();status('Saved '+part+'. Ready for next part.')};
+el('bcClear').onclick=()=>{if(pending.length&&!confirm('Discard pending scans?'))return;pending=[];render()};el('bcFind').oninput=render;
+el('bcPart').addEventListener('change',()=>{const r=rows.find(x=>partKey(x.part)===partKey(el('bcPart').value));if(r)el('bcDesc').value=r.description||''});
+function download(name,text,type){const url=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000)}
+el('bcExport').onclick=()=>{if(!authorized())return;const lines=[['PartNumber','Description','Barcode','BarcodeType','CapturedAt']];for(const r of rows)for(const b of r.barcodes)lines.push([r.part,r.description,b.code,b.type,b.at]);const csv=lines.map(row=>row.map(v=>'"'+String(v||'').replace(/^[=+@-]/,m=>"'"+m).replace(/"/g,'""')+'"').join(',')).join('\r\n');download('Barcode_Collector.csv','\ufeff'+csv,'text/csv;charset=utf-8')};
+el('bcBackup').onclick=()=>{if(authorized())download('Barcode_Collector_Backup.json',JSON.stringify(rows,null,2),'application/json')};
+el('bcImport').onclick=()=>el('bcImportFile').click();el('bcImportFile').onchange=async e=>{if(!authorized())return;try{const data=JSON.parse(await e.target.files[0].text());if(!Array.isArray(data)||!data.every(r=>typeof r.part==='string'&&Array.isArray(r.barcodes)&&r.barcodes.every(b=>typeof b.code==='string')))throw Error('Invalid backup');if(!confirm('Replace local collector records with this backup?'))return;rows=data;saveLocal();render();status('Backup imported.')}catch(e){status('Import failed: '+e.message)}finally{e.target.value=''}};
+const nav=document.createElement('button');nav.id='bcNav';nav.type='button';nav.textContent='📷 Barcode Collector';nav.style.display='none';el('warrantyNav').append(nav);el('warrantyNav').after(el('bcPage'));
+function visibility(){const yes=!!authorized();nav.style.display=yes?'':'none';if(!yes&&open)closeCollector()}
+function closeCollector(){open=false;stop();el('bcPage').style.display='none';document.body.classList.remove('bc-active');nav.classList.remove('active')}
+nav.onclick=()=>{if(!authorized())return;open=true;document.body.classList.add('bc-active');el('bcPage').style.display='block';document.querySelectorAll('#warrantyNav button').forEach(b=>b.classList.remove('active'));nav.classList.add('active');render();el('bcPage').scrollIntoView()};
+for(const id of ['wHome','wOpen','serviceNav','scheduleNav'])el(id).addEventListener('click',closeCollector,true);
+if(typeof sb!=='undefined'&&sb)sb.auth.onAuthStateChange(()=>setTimeout(visibility,150));setInterval(visibility,1500);visibility();render();
+})();
+</script>
 </body>
 </html>
