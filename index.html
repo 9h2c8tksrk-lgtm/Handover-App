@@ -5,45 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shift Handover</title>
 <script src="https://unpkg.com/html5-qrcode">
-// AUTOMATIC LIVE VERSION CHECKER
-(function () {
-  const CHECK_INTERVAL = 60000;
-  const VERSION_FILE = "./version.json";
 
-  let currentVersion = null;
 
-  async function checkForUpdates() {
-    try {
-      const response = await fetch(
-        VERSION_FILE + "?t=" + Date.now(),
-        { cache: "no-store" }
-      );
 
-      if (!response.ok) return;
-
-      const data = await response.json();
-
-      if (!currentVersion) {
-        currentVersion = data.version;
-        return;
-      }
-
-      if (data.version !== currentVersion) {
-        console.log("New Handover App version detected");
-
-        window.location.reload();
-      }
-    } catch (error) {
-      console.log("Version check unavailable");
-    }
-  }
-
-  checkForUpdates();
-
-  setInterval(checkForUpdates, CHECK_INTERVAL);
-
-  window.addEventListener("focus", checkForUpdates);
-})();
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2035,6 +1999,172 @@ document.addEventListener("visibilitychange", () => {
 
 window.addEventListener("focus", checkHandoverReminder);
 
+
+// SAFE AUTO REFRESH V3
+(function () {
+
+  const VERSION_FILE = "./version.json";
+  const CHECK_INTERVAL = 60000;
+
+  let currentVersion = null;
+  let updateAvailable = false;
+  let unsavedChanges = false;
+  let lastEdit = 0;
+  let refreshing = false;
+
+  const IDLE_TIME = 120000;
+
+  function isField(target) {
+    return target instanceof Element &&
+      !!target.closest(
+        "input, textarea, select, [contenteditable]"
+      );
+  }
+
+  document.addEventListener("input", e => {
+    if (isField(e.target)) {
+      unsavedChanges = true;
+      lastEdit = Date.now();
+    }
+  }, true);
+
+  document.addEventListener("change", e => {
+    if (isField(e.target)) {
+      unsavedChanges = true;
+      lastEdit = Date.now();
+    }
+  }, true);
+
+  function isEditing() {
+    const active = document.activeElement;
+
+    return (
+      unsavedChanges ||
+      isField(active) ||
+      Date.now() - lastEdit < IDLE_TIME
+    );
+  }
+
+  function showUpdateBanner() {
+
+    if (document.getElementById("safeUpdateBanner"))
+      return;
+
+    const banner = document.createElement("div");
+
+    banner.id = "safeUpdateBanner";
+
+    banner.style.cssText = `
+      position:fixed;
+      bottom:20px;
+      left:20px;
+      right:20px;
+      max-width:480px;
+      margin:auto;
+      background:#202833;
+      color:white;
+      padding:20px;
+      border:2px solid #e8a317;
+      border-radius:12px;
+      z-index:99999;
+      box-shadow:0 10px 30px #0008;
+      font-family:Arial;
+    `;
+
+    banner.innerHTML = `
+      <strong>🔔 Handover App Update Available</strong>
+      <p>
+        A new version is ready.
+        Save your work before refreshing.
+      </p>
+      <button id="safeRefreshNow">
+        Refresh Now
+      </button>
+      <button id="safeRefreshLater">
+        Later
+      </button>
+    `;
+
+    document.body.appendChild(banner);
+
+    document.getElementById(
+      "safeRefreshNow"
+    ).onclick = () => {
+
+      if (isEditing()) {
+        if (!confirm(
+          "You may have unsaved changes. " +
+          "Refresh anyway?"
+        )) return;
+      }
+
+      refreshing = true;
+      location.reload();
+    };
+
+    document.getElementById(
+      "safeRefreshLater"
+    ).onclick = () => banner.remove();
+  }
+
+  async function checkForUpdates() {
+
+    if (refreshing) return;
+
+    try {
+
+      const response = await fetch(
+        VERSION_FILE + "?t=" + Date.now(),
+        { cache: "no-store" }
+      );
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+
+      if (!data.version) return;
+
+      if (currentVersion === null) {
+        currentVersion = data.version;
+        return;
+      }
+
+      if (data.version !== currentVersion)
+        updateAvailable = true;
+
+      if (!updateAvailable) return;
+
+      if (isEditing()) {
+        showUpdateBanner();
+        return;
+      }
+
+      refreshing = true;
+      location.reload();
+
+    } catch (error) {
+      console.log("Update check unavailable", error);
+    }
+  }
+
+  window.addEventListener("beforeunload", e => {
+    if (unsavedChanges && !refreshing) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+
+  checkForUpdates();
+
+  setInterval(checkForUpdates, CHECK_INTERVAL);
+
+  window.addEventListener(
+    "focus",
+    checkForUpdates
+  );
+
+})();
+// END SAFE AUTO REFRESH V3
 </script>
 </body>
 </html>
