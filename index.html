@@ -2190,7 +2190,7 @@ body.bc-active main > :not(#warrantyNav):not(#bcPage){display:none!important}
 'use strict';
 const el=id=>document.getElementById(id), key='golden-eagle.barcode-collector.v1';
 const allowedEmail='lachlan.morris@mgmgroup.com.au';
-let rows=[],pending=[],camera=null,open=false,lastCode='',lastTime=0;
+let rows=[],pending=[],camera=null,open=false,lastCode='',lastTime=0,reading=false;
 try{const x=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(x))rows=x;}catch{}
 const authorized=()=>typeof appAuthorized!=='undefined'&&appAuthorized&&typeof sbUser!=='undefined'&&sbUser&&String(sbUser.email||'').toLowerCase()===allowedEmail;
 const status=t=>el('bcStatus').textContent=t;
@@ -2215,9 +2215,33 @@ function addBarcode(code){code=norm(code);if(!code)return status('Scan or enter 
  pending.push({code,type:el('bcType').value,at:new Date().toISOString()});el('bcCode').value='';status('Added '+code+'. Scan another or Save & Next.');render();
 }
 async function stop(){if(camera){try{await camera.stop()}catch{}try{camera.clear()}catch{}camera=null}}
+const readBtn=document.createElement('button');
+readBtn.id='bcRead';
+readBtn.type='button';
+readBtn.textContent='🎯 Start Reading Barcode';
+el('bcStart').after(readBtn);
+
+readBtn.onclick=()=>{
+  if(!camera){
+    status('Open the camera first.');
+    return;
+  }
+  reading=true;
+  status('Reading barcode... Hold barcode steady in camera view.');
+};
+
 el('bcStart').onclick=async()=>{if(!authorized())return status('Only Lachlan can use Barcode Collector.');if(camera)return;
  if(!window.Html5Qrcode)return status('Scanner library unavailable. Check connection or enter barcode manually.');
- try{camera=new Html5Qrcode('bcReader');await camera.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:150}},code=>{if(code===lastCode&&Date.now()-lastTime<2000)return;lastCode=code;lastTime=Date.now();addBarcode(code)});status('Camera ready. Scan barcodes for the selected part.')}catch(e){status('Camera unavailable: '+e.message+'. Use manual entry.');await stop()}
+ try{camera=new Html5Qrcode('bcReader');await camera.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:150}},code=>{if(!reading)return;if(code===lastCode&&Date.now()-lastTime<2000)return;lastCode=code;
+lastTime=Date.now();
+reading=false;
+el('bcCode').value=code;
+if(norm(el('bcPart').value)){
+  addBarcode(code);
+  status('✅ Barcode captured: '+code+'. Press Start Reading for another.');
+}else{
+  status('✅ Barcode captured: '+code+'. Enter the part number, then press Add barcode.');
+}});status('Camera ready. Scan barcodes for the selected part.')}catch(e){status('Camera unavailable: '+e.message+'. Use manual entry.');await stop()}
 };
 el('bcStop').onclick=stop;el('bcAdd').onclick=()=>addBarcode(el('bcCode').value);el('bcCode').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addBarcode(el('bcCode').value)}});
 el('bcSave').onclick=()=>{if(!authorized())return;const part=norm(el('bcPart').value),description=norm(el('bcDesc').value);if(!part)return status('Part number required.');if(!pending.length)return status('Add at least one barcode.');
