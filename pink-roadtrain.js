@@ -24,7 +24,7 @@
   img.alt = '';
   const beacon = document.createElement('span');
   beacon.className = 'ultra-quad-beacon';
-  convoy.append(img,beacon);
+  convoy.append(img);
   root.appendChild(convoy);
   const hour = new Date().getHours();
   if (hour >= 17 || hour < 5) root.classList.add('night');
