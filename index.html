@@ -133,6 +133,35 @@ body.auth-locked > :not(#authGate){display:none!important}
   #handoverReminder p{line-height:1.5}
   #handoverReminder .actions button{flex:1;min-width:145px}
 </style>
+
+<style id="mobile-barcode-upgrade">
+#bcPage {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#bcReader {
+  width: 100%;
+  max-width: 100% !important;
+}
+
+#bcReader video {
+  width: 100% !important;
+  max-height: 65vh;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+#bcPage button {
+  min-height: 52px;
+  font-size: 16px;
+  touch-action: manipulation;
+}
+
+#bcCode {
+  font-size: 18px;
+}
+</style>
 </head>
 <body class="auth-locked">
 <div id="authGate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -2232,7 +2261,17 @@ readBtn.onclick=()=>{
 
 el('bcStart').onclick=async()=>{if(!authorized())return status('Only Lachlan can use Barcode Collector.');if(camera)return;
  if(!window.Html5Qrcode)return status('Scanner library unavailable. Check connection or enter barcode manually.');
- try{camera=new Html5Qrcode('bcReader');await camera.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:150}},code=>{if(!reading)return;if(code===lastCode&&Date.now()-lastTime<2000)return;lastCode=code;
+ try{
+  if(typeof reading !== 'undefined') reading=true;
+  camera=new Html5Qrcode('bcReader');await camera.start({facingMode:'environment'},{
+  fps:15,
+  disableFlip:true,
+  videoConstraints:{
+    facingMode:"environment",
+    width:{ideal:1920},
+    height:{ideal:1080}
+  }
+},code=>{if(!reading)return;if(code===lastCode&&Date.now()-lastTime<2000)return;lastCode=code;
 lastTime=Date.now();
 reading=false;
 el('bcCode').value=code;
