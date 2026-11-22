@@ -2243,7 +2243,7 @@ function addBarcode(code){code=norm(code);if(!code)return status('Scan or enter 
  if(pending.some(b=>b.code===code)||rows.some(r=>partKey(r.part)===partKey(el('bcPart').value)&&r.barcodes.some(b=>b.code===code)))return status('Barcode already recorded for this part.');
  pending.push({code,type:el('bcType').value,at:new Date().toISOString()});el('bcCode').value='';status('Added '+code+'. Scan another or Save & Next.');render();
 }
-async function stop(){if(camera){try{await camera.stop()}catch{}try{camera.clear()}catch{}camera=null}}
+async function stop(){window.bcMobileUpgrade?.stopped();reading=false;if(camera){try{await camera.stop()}catch{}try{camera.clear()}catch{}camera=null}}
 const readBtn=document.createElement('button');
 readBtn.id='bcRead';
 readBtn.type='button';
@@ -2271,16 +2271,29 @@ el('bcStart').onclick=async()=>{if(!authorized())return status('Only Lachlan can
     width:{ideal:1920},
     height:{ideal:1080}
   }
-},code=>{if(!reading)return;if(code===lastCode&&Date.now()-lastTime<2000)return;lastCode=code;
-lastTime=Date.now();
-reading=false;
-el('bcCode').value=code;
-if(norm(el('bcPart').value)){
+},code=>{
+  if (!reading) return;
+  code=norm(code);
+  if (!code) return;
+  const now=Date.now();
+  if (code===lastCode && now-lastTime<2500) return;
+  lastCode=code; lastTime=now;
+  el('bcCode').value=code;
+  if (!norm(el('bcPart').value)) {
+    status('Barcode detected: '+code+'. Enter part number, then Add barcode.');
+    reading=false;
+    return;
+  }
+  const duplicate=pending.some(b=>b.code===code) ||
+    rows.some(r=>r.barcodes.some(b=>b.code===code));
+  if (duplicate) {
+    window.bcMobileUpgrade?.duplicate(code);
+    return;
+  }
   addBarcode(code);
-  status('✅ Barcode captured: '+code+'. Press Start Reading for another.');
-}else{
-  status('✅ Barcode captured: '+code+'. Enter the part number, then press Add barcode.');
-}});status('Camera ready. Scan barcodes for the selected part.')}catch(e){status('Camera unavailable: '+e.message+'. Use manual entry.');await stop()}
+  window.bcMobileUpgrade?.captured(code);
+  if (!window.bcMobileUpgrade?.continuous()) reading=false;
+});status('Camera ready. Scan barcodes for the selected part.');window.bcMobileUpgrade?.ready()}catch(e){status('Camera unavailable: '+e.message+'. Use manual entry.');await stop()}
 };
 el('bcStop').onclick=stop;el('bcAdd').onclick=()=>addBarcode(el('bcCode').value);el('bcCode').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addBarcode(el('bcCode').value)}});
 el('bcSave').onclick=()=>{if(!authorized())return;const part=norm(el('bcPart').value),description=norm(el('bcDesc').value);if(!part)return status('Part number required.');if(!pending.length)return status('Add at least one barcode.');
@@ -2302,5 +2315,6 @@ for(const id of ['wHome','wOpen','serviceNav','scheduleNav'])el(id).addEventList
 if(typeof sb!=='undefined'&&sb)sb.auth.onAuthStateChange(()=>setTimeout(visibility,150));setInterval(visibility,1500);visibility();render();
 })();
 </script>
+<script src="barcode-mobile-upgrade.js" defer></script>
 </body>
 </html>
