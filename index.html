@@ -1378,6 +1378,7 @@ function printBooking(m){
     <p id="snapshotStatus" role="status" style="color:#bde7c4"></p>
   </div>
 </div>
+<script src="pink-roadtrain.js" defer></script>
 </body></html>`;
   win.document.write(html);win.document.close();win.focus();
   // Browsers cannot verify physical printing; request confirmation after print dialogue.
@@ -1842,7 +1843,8 @@ $('snapshotCopy').onclick=async()=>{
 $('snapshotPrint').onclick=()=>{
   const win=window.open('','_blank');if(!win){alert('Allow pop-ups to print the snapshot.');return}
   const html=$('snapshotPreview').outerHTML;
-  win.document.write('<!doctype html><html><head><title>Shift Handover Snapshot</title><style>body{font:14px Arial;background:#fff;color:#111;margin:24px}.snap-head{background:#e8a317;padding:18px;font-size:20px;font-weight:bold}.snap-meta{background:#303741;color:#fff;padding:12px}.snap-body{padding:12px}.snap-section{border:1px solid #aaa;margin:0 0 10px;break-inside:avoid}.snap-section h3{background:#353f49;color:#e8a317;margin:0;padding:10px}.snap-section p{white-space:pre-wrap;padding:12px;margin:0}.snap-foot{font-size:11px;color:#555}</style></head><body>'+html+'</body></html>');
+  win.document.write('<!doctype html><html><head><title>Shift Handover Snapshot</title><style>body{font:14px Arial;background:#fff;color:#111;margin:24px}.snap-head{background:#e8a317;padding:18px;font-size:20px;font-weight:bold}.snap-meta{background:#303741;color:#fff;padding:12px}.snap-body{padding:12px}.snap-section{border:1px solid #aaa;margin:0 0 10px;break-inside:avoid}.snap-section h3{background:#353f49;color:#e8a317;margin:0;padding:10px}.snap-section p{white-space:pre-wrap;padding:12px;margin:0}.snap-foot{font-size:11px;color:#555}</style></head><body>'+html+'<script src="pink-roadtrain.js" defer></script>
+</body></html>');
   win.document.close();win.focus();win.print();
 };
 $('snapshotEmail').onclick=()=>openEmailDraft(window.handoverSnapshotSubject,window.handoverSnapshotPlain+'\n\nFor the colour-formatted version, paste the copied snapshot into this message or attach the saved PDF.');
@@ -2161,5 +2163,6 @@ window.addEventListener("focus", checkHandoverReminder);
 })();
 // END SAFE AUTO REFRESH V3
 </script>
+<script src="pink-roadtrain.js" defer></script>
 </body>
 </html>
