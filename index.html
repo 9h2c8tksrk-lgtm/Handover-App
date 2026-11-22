@@ -1879,6 +1879,121 @@ document.addEventListener('click',e=>{
   if(w)warrantyEmail(w);
 });
 
+
+// AUTOMATIC HANDOVER REMINDER
+// Day shift 4 PM, night shift 4 AM
+
+const HANDOVER_REMINDER_KEY = "handover_reminder_v1";
+
+function reminderShiftEnd(c) {
+  const m = /^(Day|Night) (\d{4})-(\d+)-(\d+)$/.exec(c.shiftKey || "");
+  if (!m) return null;
+
+  const [, shift, y, month, day] = m;
+
+  return shift === "Day"
+    ? new Date(+y, +month-1, +day, 17)
+    : new Date(+y, +month-1, +day+1, 5);
+}
+
+function reminderCompleted(c) {
+  return data.some(h =>
+    h.from === c.user &&
+    h.created &&
+    new Date(h.created).getTime() >= new Date(c.at).getTime()
+  );
+}
+
+let activeHandoverReminder = null;
+
+function closeHandoverReminder() {
+  $("handoverReminder").style.display = "none";
+  activeHandoverReminder = null;
+}
+
+function checkHandoverReminder() {
+  if (!appAuthorized || !ss || !ss.on) return;
+
+  const now = Date.now();
+
+  if (activeHandoverReminder) {
+    if (reminderCompleted(activeHandoverReminder) ||
+        !ss.on.some(c => c.at === activeHandoverReminder.at)) {
+      closeHandoverReminder();
+    }
+    return;
+  }
+
+  for (const c of ss.on) {
+    const end = reminderShiftEnd(c);
+    if (!end || reminderCompleted(c)) continue;
+
+    const remaining = end.getTime() - now;
+
+    if (remaining > 3600000 || remaining <= 0) continue;
+
+    const key = HANDOVER_REMINDER_KEY + ":" + c.user + ":" + c.at;
+    const snoozeUntil = Number(localStorage.getItem(key) || 0);
+
+    if (now < snoozeUntil) continue;
+
+    activeHandoverReminder = c;
+
+    const message =
+      "Hey " + c.user +
+      ", just a reminder, have you completed your handover?";
+
+    $("reminderMessage").textContent = message;
+    $("handoverReminder").style.display = "flex";
+
+    briefSay(message);
+
+    if ("Notification" in window &&
+        Notification.permission === "granted") {
+      new Notification("Handover Reminder", {
+        body: message
+      });
+    }
+
+    break;
+  }
+}
+
+$("reminderOpen").onclick = () => {
+  closeHandoverReminder();
+  showWarrantyPage(false);
+  $("form").scrollIntoView({behavior:"smooth"});
+};
+
+$("reminderDone").onclick = () => {
+  if (!activeHandoverReminder) return;
+
+  if (reminderCompleted(activeHandoverReminder)) {
+    closeHandoverReminder();
+  } else {
+    $("reminderMessage").textContent =
+      "No completed handover found. Please complete your handover or snooze.";
+  }
+};
+
+$("reminderSnooze").onclick = () => {
+  if (!activeHandoverReminder) return;
+
+  const c = activeHandoverReminder;
+  const key = HANDOVER_REMINDER_KEY + ":" + c.user + ":" + c.at;
+
+  localStorage.setItem(key, String(Date.now() + 900000));
+  closeHandoverReminder();
+};
+
+setInterval(checkHandoverReminder, 30000);
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) checkHandoverReminder();
+});
+
+window.addEventListener("focus", checkHandoverReminder);
+
 </script>
 </body>
 </html>
