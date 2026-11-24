@@ -1100,6 +1100,11 @@ let ss=JSON.parse(localStorage.getItem(SKEY)||'{"on":[],"log":[]}');
 if(!Array.isArray(ss.on)){ss.on=ss.cur?[ss.cur]:[];delete ss.cur} // migrate old single-user format
 const pins=JSON.parse(localStorage.getItem(PKEY)||"{}");
 const ssave=()=>localStorage.setItem(SKEY,JSON.stringify(ss));
+// Force-sign-off anyone whose access was revoked (local and synced shift state).
+function kickRevoked(){const gone=ss.on.filter(c=>REVOKED.includes(c.user));if(!gone.length)return false;
+  const now=new Date().toISOString();gone.forEach(c=>{c.off=now;c.revoked=true;ss.log.push(c)});
+  ss.on=ss.on.filter(c=>!REVOKED.includes(c.user));ssave();return true}
+let revokedDirty=kickRevoked(); // pushed to the server on the next sync
 async function hash(pin){
   const t="handover:"+pin;
   if(window.crypto&&crypto.subtle){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));
@@ -1836,6 +1841,7 @@ async function pull(){
   applying=true;
   for(const r of rows){seen.add(r.id);lastSync=r.updated_at;if(!pend.has(r.id))applyRow(r)}
   applying=false;
+  if(kickRevoked()||revokedDirty){revokedDirty=false;pushShift();flush()}
   if(!lastSync)lastSync="1970-01-01T00:00:00+00:00";
   localStorage.setItem(SLAST,lastSync);
   if(first){ // seed server with anything this device already had
