@@ -507,7 +507,9 @@ body.auth-locked > :not(#authGate){display:none!important}
 <script>
 const CREW=["Carl","Declan","Lockie"], KEY="handovers.v1", ME="handover.me";
 // Everyone who can sign on / hand over. CREW are on the 21-day roster cycle; the rest aren't rostered.
-const USERS=[...CREW,"Hayden","Stuart"];
+// REVOKED: users kept on the roster display but removed from sign-on, handover and task lists.
+const REVOKED=["Carl"];
+const USERS=[...CREW,"Hayden","Stuart"].filter(n=>!REVOKED.includes(n));
 const SUPS=["Hayden","Stuart"]; // can assign tasks and use the handovers-only view
 const isSup=()=>SUPS.includes($("from").value);
 let supMode=false;
@@ -1108,7 +1110,7 @@ let lockOff=false; // false = sign on, true = sign off
 function fillSu(list){const su=$("su"),v=su.value;su.innerHTML="";list.forEach(n=>su.add(new Option(n,n)));if(list.includes(v))su.value=v}
 function openLock(off){lockOff=!!off;
   if(lockOff)fillSu(ss.on.map(c=>c.user));
-  else{fillSu(USERS);$("su").value=whoOn(parseD(shiftDate()),currentShift())}
+  else{fillSu(USERS);const w=whoOn(parseD(shiftDate()),currentShift());if(USERS.includes(w))$("su").value=w}
   showLock()}
 function showLock(){
   $("locktitle").textContent=lockOff?"Sign off shift":"Sign on to shift";
